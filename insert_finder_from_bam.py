@@ -6,7 +6,7 @@
 #It is also tested for bwa-mem. But, for bwa-mem outputs I saw that insertions are not soft clipped but splitting the alignments to pieces. But, thats not a problem.
 
 #INPUT: BAM FILE, and threshold for filtering insertions
-#OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{quality[read_id]}\n"
+#OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{quality[read_id]}\n"
 
 #Recep Can Altınbağ, 22 10 2024, v0.1
 #-------------------------------------
