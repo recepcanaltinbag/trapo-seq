@@ -8,7 +8,7 @@
 #INPUT: BAM FILE, and threshold for filtering insertions
 #OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{quality[read_id]}\n"
 
-#Recep Can Altınbağ, 22 10 2024, v0.0
+#Recep Can Altınbağ, 22 10 2024, v0.1
 #-------------------------------------
 
 import pysam
@@ -31,18 +31,20 @@ def calculate_average_quality(bamfile):
 
 
 #Finding insertions in CIGAR, in some other alignment programs (bwa-mem) can assign big insertions as soft-clips!
-def find_large_insertions(cigar_tuples, query_start, insertion_threshold):
+def find_large_insertions(cigar_tuples, query_start, ref_start, insertion_threshold):
     insertion_positions = []
     query_pos = query_start 
-
+    ref_pos = ref_start   
+ 
     for cigar_type, length in cigar_tuples:
         if cigar_type == 0:  # Match (alignment)
+            ref_pos += length
             query_pos += length
         elif cigar_type == 1:  # Insertion 
             if length > insertion_threshold:  # If insertion is higher than threshold
-                insertion_positions.append((query_pos, length))
+                insertion_positions.append((query_pos, length, ref_pos))
         elif cigar_type == 2:  # Deletion 
-            continue  # Deletion do not affect query pos
+            ref_pos += length
         elif cigar_type == 4 or cigar_type == 5:
             query_pos += length
 
@@ -52,7 +54,7 @@ def find_large_insertions(cigar_tuples, query_start, insertion_threshold):
 # for the array as 1,1,0,0,0,0,1,1,1
 # this function returns index of start of 0, and length, like (2,5,4)
 # so the insertions can be found 
-def find_zero_sequences(arr):
+def find_zero_sequences(arr, insertion_threshold, ref):
     zero_sequences = []
     start = None  
     length = 0    
@@ -64,12 +66,14 @@ def find_zero_sequences(arr):
             length += 1    
         else:
             if start is not None:
-                zero_sequences.append((start, i - 1, length))
+                print('Start',start)
+                if length > insertion_threshold:
+                    zero_sequences.append((start, i - 1, length, ref))
                 start = None
                 length = 0
 
-    if start is not None:
-        zero_sequences.append((start, len(arr) - 1, length))
+    if start is not None and length > insertion_threshold:
+        zero_sequences.append((start, len(arr) - 1, length, ref))
 
     return zero_sequences
 
@@ -90,11 +94,11 @@ def get_middle_inserts(bamfile, insertion_threshold):
                     cigar_tuples = read.cigartuples
                 
                 query_start = 0
-                inserts = find_large_insertions(cigar_tuples, query_start, insertion_threshold)
+                inserts = find_large_insertions(cigar_tuples, query_start, ref_start, insertion_threshold)
                 if inserts != []:
                     insert_list = []
                     for insert in inserts:
-                        insert_list.append((insert[0], insert[0] + insert[1], insert[1]))
+                        insert_list.append((insert[0], insert[0] + insert[1], insert[1], insert[2])) #insert 2 is ref position
                     reads[read_id] = insert_list
     return reads
 
@@ -107,7 +111,7 @@ def get_read_info(bamfile, insertion_threshold):
         for read in bam:
             if not read.is_unmapped: 
                 read_id = read.query_name
-                print(read_id)
+                #print(read_id)
                 
                 ref_start = read.reference_start
                 ref_end = read.reference_end
@@ -121,9 +125,11 @@ def get_read_info(bamfile, insertion_threshold):
                 query_start = 0
                 query_end = sum(length for op, length in cigar_tuples if op in {0, 1, 7, 8})  # Matches with insertions (1:I)
                 
-                #print(ref_start, ref_end)
+                
+   
                 #print(read.cigartuples[0],read.cigartuples[-1][1])
-                #if "ce648e78" in read_id:
+                #if "336c35be" in read_id:
+                #    print(ref_start, ref_end)
                 #    print(cigar_tuples)
                 #    input()
 
@@ -137,7 +143,8 @@ def get_read_info(bamfile, insertion_threshold):
                     "reference_end": ref_end,
                     "query_start": query_start,
                     "query_end": query_end,
-                    "aligned_length": sum(length for op, length in cigar_tuples if op in {0,2,7,8})  # Matches with deletions (2:D)
+                    "aligned_length": sum(length for op, length in cigar_tuples if op in {0,2,7,8}),  # Matches with deletions (2:D)
+                    "reverse": read.is_reverse
                 })
                 read_len_dict[read_id] = read.infer_read_length()
 
@@ -150,17 +157,63 @@ def filter_and_write_read_ids(read_data, output_file, threshold, quality):
     with open(output_file, 'w') as f:
         for read_id, sequences in read_data.items():
             for seq in sequences:
-                start, end, length = seq
+                start, end, length, ref_pos = seq
                 if length > threshold:
-                    f.write(f"{read_id}\t{start}\t{end}\t{length}\t{quality[read_id]}\n")
+                    f.write(f"{read_id}\t{start}\t{end}\t{length}\t{ref_pos}\t{quality[read_id]}\n")
+
+
+#In splitted alignments, it is not easy to understand reference position, so this function gives the closest point!
+def find_nearest_reference(align_table, start, end, reverse):
+    nearest_reference = None
+    min_diff = float('inf')
+    
+    for ref_start, ref_end, query_start, query_end in align_table:
+       
+        diff_start = abs(query_start - start)
+        diff_end = abs(query_end - end)
+
+        diff_e_start = abs(query_end - start)        
+        diff_s_end = abs(query_start - end) 
+
+        if diff_start < min_diff:
+            min_diff = diff_start
+            if reverse:
+                nearest_reference = ref_end
+            else:
+                nearest_reference = ref_start
+
+        if diff_s_end < min_diff:
+            min_diff = diff_s_end
+            if reverse:
+                nearest_reference = ref_end
+            else:
+                nearest_reference = ref_start 
+      
+
+        if diff_end < min_diff:
+            min_diff = diff_end
+            if reverse:
+                nearest_reference = ref_start
+            else:
+                nearest_reference = ref_end
+        
+        if diff_e_start < min_diff:
+            min_diff = diff_e_start
+            if reverse:
+                nearest_reference = ref_start
+            else:
+                nearest_reference = ref_end 
+    
+    return nearest_reference
+
 
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
 # INPUTS
-bamfile = "sorted_mapped_to_plasmid.bam"
+bamfile = "sorted.bam"
 insertion_threshold = 500
 # OUTPUTS
-output_file = "filtered_read_insertions_minimap2_bwa.txt"
+output_file = "filtered_read_insertions_minimap2_with_refs.txt"
 #----------------------------------------------------
 
 read_info, read_len_dict = get_read_info(bamfile, insertion_threshold)
@@ -168,18 +221,32 @@ reads_insertions = defaultdict(list)
 
 for read_id, alignments in read_info.items():
     zero_list = [0] * read_len_dict[read_id]
-
+    print(f"Read ID: {read_id}")
     print(len(zero_list))
+    
+    align_table = []
+
     for alignment in alignments:
         zero_list[alignment['query_start']:alignment['query_end']] = [1] * (alignment['query_end'] - alignment['query_start'])
-        print(f"Read ID: {read_id}")
+        #print(zero_list)
         print(f"  Reference Start: {alignment['reference_start']}")
         print(f"  Reference End: {alignment['reference_end']}")
         print(f"  Query Start: {alignment['query_start']}")
         print(f"  Query End: {alignment['query_end']}")
         print(f"  Aligned Length: {alignment['aligned_length']}")
-    reads_insertions[read_id] = find_zero_sequences(zero_list) 
-    print(reads_insertions[read_id])
+        align_table.append((alignment['reference_start'], alignment['reference_end'], alignment['query_start'], alignment['query_end']))
+    
+    temp_ins = find_zero_sequences(zero_list, insertion_threshold, -1)
+    new_ins = []
+    if temp_ins != []:
+        for each_temp_ins in temp_ins:
+            ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1], alignment['reverse'])
+            new_ins.append((each_temp_ins[0],each_temp_ins[1],each_temp_ins[2],ref))
+        reads_insertions[read_id] = new_ins
+        print(reads_insertions[read_id], alignment['reverse'])
+        #if '814fde06' in read_id:
+        #    input()
+
 
 reads_insertions.update(get_middle_inserts(bamfile, insertion_threshold))
 filter_and_write_read_ids(reads_insertions, output_file, insertion_threshold, calculate_average_quality(bamfile))
