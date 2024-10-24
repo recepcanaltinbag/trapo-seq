@@ -104,7 +104,7 @@ def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, outp
     ax2.legend(loc='upper right')
 
     plt.title('Insertions and Deletions')
-    plt.savefig(f"{output}_{name}.png")
+    plt.savefig(f"{output}_{name}.pdf")
     plt.show()
 
 
