@@ -97,12 +97,14 @@ def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, outp
     ax1.plot(sorted_deletion_positions, sorted_deletion_counts, label=f"Deletions [{name}]", color='m', marker='x')
     ax1.legend(loc='upper left')
     ax1.grid(True)
-
+    ax1.minorticks_on()
+    
     ax2 = ax1.twinx()
     ax2.set_ylabel(f"Insertions [{name}]")
     ax2.plot(sorted_insertion_positions, sorted_insertion_counts, label=f"Insertions [{name}]", color='g', marker='s')
     ax2.legend(loc='upper right')
-
+    ax2.minorticks_on()
+    
     plt.title('Insertions and Deletions')
     plt.savefig(f"{output}_{name}.pdf")
     plt.show()
