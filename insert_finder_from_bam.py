@@ -6,7 +6,7 @@
 #It is also tested for bwa-mem. But, for bwa-mem outputs I saw that insertions are not soft clipped but splitting the alignments to pieces. But, thats not a problem.
 
 #INPUT: BAM FILE, and threshold for filtering insertions
-#OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{quality[read_id]}\n"
+#OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\n"
 
 #Recep Can Altınbağ, 22 10 2024, v0.1
 #-------------------------------------
@@ -30,25 +30,6 @@ def calculate_average_quality(bamfile):
     return average_quality
 
 
-#Finding insertions in CIGAR, in some other alignment programs (bwa-mem) can assign big insertions as soft-clips!
-def find_large_insertions(cigar_tuples, query_start, ref_start, insertion_threshold):
-    insertion_positions = []
-    query_pos = query_start 
-    ref_pos = ref_start   
- 
-    for cigar_type, length in cigar_tuples:
-        if cigar_type == 0:  # Match (alignment)
-            ref_pos += length
-            query_pos += length
-        elif cigar_type == 1:  # Insertion 
-            if length > insertion_threshold:  # If insertion is higher than threshold
-                insertion_positions.append((query_pos, length, ref_pos))
-        elif cigar_type == 2:  # Deletion 
-            ref_pos += length
-        elif cigar_type == 4 or cigar_type == 5:
-            query_pos += length
-
-    return insertion_positions
 
 
 # for the array as 1,1,0,0,0,0,1,1,1
@@ -77,6 +58,29 @@ def find_zero_sequences(arr, insertion_threshold, ref):
 
     return zero_sequences
 
+#Finding insertions in CIGAR, in some other alignment programs (bwa-mem) can assign big insertions as soft-clips!
+#rev_type for if reads are reversed the ref and query must be moved differently!
+def find_large_insertions(cigar_tuples, query_start, ref_start, insertion_threshold, rev_type):
+    insertion_positions = []
+    query_pos = query_start 
+    ref_pos = ref_start   
+ 
+    for cigar_type, length in cigar_tuples:
+        if cigar_type == 0:  # Match (alignment)
+            ref_pos = ref_pos + rev_type * length
+            query_pos += length
+        elif cigar_type == 1:  # Insertion 
+            if length > insertion_threshold:  # If insertion is higher than threshold
+                insertion_positions.append((query_pos, length, ref_pos))
+        elif cigar_type == 2:  # Deletion 
+            ref_pos = ref_pos + rev_type * length
+        elif cigar_type == 4 or cigar_type == 5:
+            query_pos += length
+
+    return insertion_positions
+
+
+
 # To deal with inserts in CIGAR strings
 def get_middle_inserts(bamfile, insertion_threshold):
     reads = defaultdict(list)
@@ -89,16 +93,18 @@ def get_middle_inserts(bamfile, insertion_threshold):
                 ref_end = read.reference_end
 
                 if read.is_reverse:
-                    cigar_tuples = list(reversed(read.cigartuples))
+                    cigar_tuples = list(reversed(read.cigartuples)) #for reverse reads, reference or query must be reversed!
+                    query_start = 0
+                    inserts = find_large_insertions(cigar_tuples, query_start, ref_end, insertion_threshold, -1)
                 else:
                     cigar_tuples = read.cigartuples
-                
-                query_start = 0
-                inserts = find_large_insertions(cigar_tuples, query_start, ref_start, insertion_threshold)
+                    query_start = 0
+                    inserts = find_large_insertions(cigar_tuples, query_start, ref_start, insertion_threshold, 1)              
+
                 if inserts != []:
                     insert_list = []
                     for insert in inserts:
-                        insert_list.append((insert[0], insert[0] + insert[1], insert[1], insert[2])) #insert 2 is ref position
+                        insert_list.append((insert[0], insert[0] + insert[1], insert[1], insert[2], 'IN')) #insert 2 is ref position
                     reads[read_id] = insert_list
     return reads
 
@@ -157,9 +163,9 @@ def filter_and_write_read_ids(read_data, output_file, threshold, quality):
     with open(output_file, 'w') as f:
         for read_id, sequences in read_data.items():
             for seq in sequences:
-                start, end, length, ref_pos = seq
+                start, end, length, ref_pos, insert_type = seq
                 if length > threshold:
-                    f.write(f"{read_id}\t{start}\t{end}\t{length}\t{ref_pos}\t{quality[read_id]}\n")
+                    f.write(f"{read_id}\t{start}\t{end}\t{length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\n")
 
 
 #In splitted alignments, it is not easy to understand reference position, so this function gives the closest point!
@@ -241,7 +247,7 @@ for read_id, alignments in read_info.items():
     if temp_ins != []:
         for each_temp_ins in temp_ins:
             ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1], alignment['reverse'])
-            new_ins.append((each_temp_ins[0],each_temp_ins[1],each_temp_ins[2],ref))
+            new_ins.append((each_temp_ins[0],each_temp_ins[1],each_temp_ins[2],ref,'SC'))
         reads_insertions[read_id] = new_ins
         print(reads_insertions[read_id], alignment['reverse'])
         #if '814fde06' in read_id:
