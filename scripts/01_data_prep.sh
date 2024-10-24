@@ -1,4 +1,7 @@
 
+
+# 1 - FOLDER PREPARATION 
+
 #After changing names of folders: barcode numbers -> sample or condition names
 #This will combine unzip files and concatanate in to single *_merged.fastq
 
@@ -11,7 +14,17 @@ for dir in */; do
     cd ..
 done
 
+# 1 - ALIGNMENT 
 
+# For each folder which has merged fastq files, this script will map them to the plasmid, and genome, and creates
+# just mapped fastq files and fasta file 
+# Reads mapped to -> plasmid -> mapped to genome -> 
+
+# Statistics of reads:
+#  Total Reads: A
+#  Plasmid Only: B
+#  Genome and Plasmid: C 
+#   ->Transposition Ratio: C/(C+B)
 
 
 for dir in */; do
