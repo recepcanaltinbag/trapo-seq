@@ -11,7 +11,8 @@ First, it would be appropriate to examine the length and quality distributions o
 
 ## Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [NanoPlot](https://github.com/wdecoster/NanoPlot) 
+- [NanoPlot](https://github.com/wdecoster/NanoPlot)
+- If you want to visualize without using NanoPlot you can use the Python script under extra folder (extra/00_read_histograms.py)
 
 ```
 NanoPlot --fastq <fastq_file> -o <output_folder>
@@ -32,8 +33,8 @@ Figure 1: Non weighted histogram graph of plasmid reads.
 
 ## Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [FiltLong](https://github.com/rrwick/Filtlong)
-- If you want to filter only length-based (you do not need FiltLong) you can use the Python script under scripts folder (scripts/02_filtering_based_on_len.py)
+- [FiltLong](https://github.com/rrwick/Filtlong) or 
+- If you want to filter only length-based (you do not need FiltLong) you can use the Python script under extra folder (extra/01_filtering_based_on_len.py)
 
 ```
 filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
@@ -47,10 +48,10 @@ filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
 
+In the directory where the demultiplexed barcode folders are located, you can use scripts/01_data_prep.sh. In this script, the alignment section has the code for mapping the fastq files inside the folders to plasmid and also genome.
 
 
-
-## Insertion Finder
+## 4. Insertion Finder
 
 
 
