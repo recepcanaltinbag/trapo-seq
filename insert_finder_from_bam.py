@@ -8,7 +8,7 @@
 #INPUT: BAM FILE, and threshold for filtering insertions
 #OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\n"
 
-#Recep Can Altınbağ, 22 10 2024, v0.1
+#Recep Can Altınbağ, 22 10 2024, v0.2
 #-------------------------------------
 
 import pysam
@@ -134,15 +134,18 @@ def get_read_info(bamfile, insertion_threshold):
                 
    
                 #print(read.cigartuples[0],read.cigartuples[-1][1])
-                #if "336c35be" in read_id:
-                #    print(ref_start, ref_end)
-                #    print(cigar_tuples)
-                #    input()
+
 
                 if cigar_tuples[0][0] == 4 or cigar_tuples[0][0] == 5:  #If there is soft or hard clips in start or end.
                      query_start = cigar_tuples[0][1]
                 
                 query_end += query_start
+                
+                #if "037606da" in read_id:
+                #    print(ref_start, ref_end)
+                #    print(query_start, query_end)
+                #    print(read.is_reverse)
+                #    input()
 
                 reads[read_id].append({
                     "reference_start": ref_start,
@@ -169,11 +172,11 @@ def filter_and_write_read_ids(read_data, output_file, threshold, quality):
 
 
 #In splitted alignments, it is not easy to understand reference position, so this function gives the closest point!
-def find_nearest_reference(align_table, start, end, reverse):
+def find_nearest_reference(align_table, start, end):
     nearest_reference = None
     min_diff = float('inf')
     
-    for ref_start, ref_end, query_start, query_end in align_table:
+    for ref_start, ref_end, query_start, query_end, reverse in align_table:
        
         diff_start = abs(query_start - start)
         diff_end = abs(query_end - end)
@@ -209,7 +212,7 @@ def find_nearest_reference(align_table, start, end, reverse):
                 nearest_reference = ref_start
             else:
                 nearest_reference = ref_end 
-    
+    print('nearest: ',nearest_reference)
     return nearest_reference
 
 
@@ -240,19 +243,28 @@ for read_id, alignments in read_info.items():
         print(f"  Query Start: {alignment['query_start']}")
         print(f"  Query End: {alignment['query_end']}")
         print(f"  Aligned Length: {alignment['aligned_length']}")
-        align_table.append((alignment['reference_start'], alignment['reference_end'], alignment['query_start'], alignment['query_end']))
+        print(f"  Aligned Reverse: {alignment['reverse']}")
+        align_table.append((alignment['reference_start'], alignment['reference_end'], alignment['query_start'], alignment['query_end'], alignment['reverse']))
     
     temp_ins = find_zero_sequences(zero_list, insertion_threshold, -1)
     new_ins = []
     if temp_ins != []:
+        print(f"Read ID: {read_id}")
         for each_temp_ins in temp_ins:
-            ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1], alignment['reverse'])
+            #print(f"Read ID: {read_id}", alignment['reverse'])
+            ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1])
             new_ins.append((each_temp_ins[0],each_temp_ins[1],each_temp_ins[2],ref,'SC'))
         reads_insertions[read_id] = new_ins
         print(reads_insertions[read_id], alignment['reverse'])
-        #if '814fde06' in read_id:
+        
+        
+        #if '037606da' in read_id:
         #    input()
 
 
-reads_insertions.update(get_middle_inserts(bamfile, insertion_threshold))
+#Extend if there are same read IDs there will be no problem
+for key, value in get_middle_inserts(bamfile, insertion_threshold).items():
+    reads_insertions[key].extend(value) 
+
+#reads_insertions.update(get_middle_inserts(bamfile, insertion_threshold))
 filter_and_write_read_ids(reads_insertions, output_file, insertion_threshold, calculate_average_quality(bamfile))
