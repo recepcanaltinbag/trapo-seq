@@ -1,0 +1,3 @@
+### Understanding CIGAR string
+
+
