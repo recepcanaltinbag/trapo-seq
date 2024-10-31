@@ -33,15 +33,17 @@ Additionally, DNA fragmentation can occur during plasmid extraction and library 
 
 For the read alignments to the reference, .sam format is mostly used and in this pipeline insertions are exracted with the help of analyzing .sam files.
 
-Query Start = 0 or if there is a Soft Clip (S)
-Query End = Query Start + (Total size of M and I)
-Alignment Length: Matches and Deletions (0,2)
+Different alignment programs can use varying coordinate systems for start and end positions. In my analyses, I used `pysam`, which operates with a 0-based coordinate system. Therefore, I am displaying all coordinates in a 0-based format for consistency.
 
-Insert type = [IN, SC]
+**Query Start = 0** or if there is a Soft Clip, **Query Start = S**
 
-The start positions can be 1 or 0-based. In this example, it is 0-based, 
-For 1-based -> [3,7]  
-For 0-based -> [2,7)
+**Query End = Query Start + (Total size of M and I)**
+
+**Alignment Length: Matches and Deletions (0,2)**
+
+Insert type can be IN or SC. IN means that the alignment program can successfully classify insertion as I. However, for some cases, alignment programs may not be classify them and fragment the alignment into two queries. So, the insertion can be find in soft-clipped region (SC). I will discuss this in next section. 
+
+The start positions can be based on either 1-based or 0-based indexing. In this example, it is 0-based. For 1-based indexing, the positions would be [3,7], while for 0-based indexing, they would be [2,7).
 
 For example, minimap2 classifies a section as a insertion, but bwa-mem classifies 
 same section as a soft clip, also there are other type of labels such as 
