@@ -1,4 +1,4 @@
-![example_output](/images/logov3.png)
+![example_output](/images/logov4.png)
 
 ### Traposome Sequencing with Nanopore Data
 
