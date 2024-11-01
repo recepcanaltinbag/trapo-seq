@@ -1,6 +1,6 @@
 ![example_output](/images/logov4.png)
 
-### Traposome Sequencing with Nanopore Data
+### Traposome Sequencing with Long Read Technologies
 
 trap-seq is a traposome sequencing pipeline for trap plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the analysis of mobile element that have trapped by the plasmid. This also helps to obtain high throughput traposome outputs. 
 
