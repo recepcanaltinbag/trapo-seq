@@ -1,7 +1,7 @@
 # trap-seq
 ### Traposome Sequencing with Nanopore Data
 
-The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as whole, just one read can allow the analysis of mobile element that have entered the plasmid. This also helps to obtain high throughput traposome distribution. 
+The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the analysis of mobile element that have entered the plasmid. This also helps to obtain high throughput traposome distribution. 
 
 First, it would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
