@@ -30,11 +30,11 @@ Figure 1: Non weighted histogram graph of plasmid reads.
 
 ## 2. Filtering
 
-To eliminate the shorter reads, it is essential to filter. We want long reads to capture the traposons as a whole, so it may be better to filter reads lower than 2kb length. But this threshold value can change according to the histograms and the yout plasmid length. In ideal world, it may be better to eliminate reads shorter than the plasmid length, however sometimes  [different cases](/docs#undesired-cases) can be happen.
+To eliminate the shorter reads, it is essential to filter. We want long reads to capture the traposons as a whole, so it may be better to filter reads lower than 2kb length. But this threshold value can change according to the histograms and the your plasmid length. In ideal world, it may be better to eliminate reads shorter than the plasmid length, however sometimes [different cases](/docs#undesired-cases) can happen.
 
 ## Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [FiltLong](https://github.com/rrwick/Filtlong) or If you want to filter only length-based (you do not need FiltLong) you can use the [Python script](/extra/01_filtering_based_on_len.py) under extra folder
+- [FiltLong](https://github.com/rrwick/Filtlong) or If you want to filter only length-based (you do not need FiltLong) you can use the [Python script](/extra/01_filtering_based_on_len.py) under extra folder.
 
 ```
 filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
@@ -48,7 +48,13 @@ filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
 
-In the directory where the demultiplexed barcode folders are located, you can use [the data prep script](/scripts/01_data_prep.sh). In this script, the alignment section has the code for mapping the fastq files inside the folders to plasmid and also genome.
+In the directory where the demultiplexed barcode folders are located, you can use [the data prep script](/scripts/01_data_prep.sh). In this script, the reads in the different folders are mapped on your plasmid and also the genome you used. Using the both plasmid and genome is significant, because if both of them have alignments in a read that means there is a jumping gene from genome to the plasmid (If the plasmid and genome do not have homologous portions, and if the read are not chimeric). Therefore, transposition ratio can be calculated.
+
+If genomic DNA contamination is to be examined, a careful approach should be taken because transposed plasmids carry portions of genomic DNA. If a read do not have any plasmid portion, it can be labeled as a DNA contamination. 
+
+During barcoding, different barcodes can get mixed up with other barcodes or that incorrect classification occurs after demultiplexing. This is also important to take into account before moving further especially if barcodes are from different strains or different plasmids.
+
+You can also look the docs section [to understand sam file and CIGAR strings](/docs#understanding-cigar-string). It is not a mandatory thing but if you want to analyse your data with different tools than minimap2, the insertion finding algorithm can need some adjustments. I tested it with [bwa-mem](https://github.com/lh3/bwa), and it is working fine but I do not know others.
 
 
 ## 4. Insertion Finder
