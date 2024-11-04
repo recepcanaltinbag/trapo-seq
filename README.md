@@ -2,9 +2,9 @@
 
 ### Traposome Sequencing with Long Read Technologies
 
-trap-seq is a traposome sequencing pipeline for trap plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete capturing of mobile elements  that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
+trap-seq is a traposome sequencing pipeline for plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements  that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
 
-First, it would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
+First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
 ## Input Data Analysis
 
@@ -12,14 +12,13 @@ First, it would be appropriate to examine the length and quality distributions o
 
 ## Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [NanoPlot](https://github.com/wdecoster/NanoPlot)
-- If you want to visualize without using NanoPlot you can use the Python script under extra folder (extra/00_read_histograms.py)
+- [NanoPlot](https://github.com/wdecoster/NanoPlot) or If you want to visualize without using NanoPlot you can use the [Python script](/extra/00_read_histograms.py) under extra folder.
 
 ```
 NanoPlot --fastq <fastq_file> -o <output_folder>
 ```
 
-If plasmids are extracted with sufficient purity, most of the reads are expected to be close to the length of the plasmid. The desired scenario is that there are mobile element insertions into the plasmids so the majority of reads are longer than the original plasmid. If there are shorter reads than, this may be due to: fragmentations while doing library preparation, the enzyme cuts more than one restriction site or the inserted mobile genetic elements have restriction site. So, it is crucial to pick restriction enzyme that does not cut mobile genetic elements and has only one restriction site on the plasmid. If the majority of the reads are not longer than the the original length of the plasmid, this may be explained by scenarios such as mutations on selective genes in plasmid or the mobile element excisions.
+If plasmids are extracted with sufficient purity, most of the reads are expected to be close to the length of the plasmid. The desired scenario is that there are mobile element insertions into the plasmids so the majority of reads are longer than the original plasmid. If there are shorter reads than, this may be due to: fragmentations while doing library preparation, the enzyme cuts more than one restriction site or the inserted mobile genetic elements have restriction site. For extra information please visit the [docs page](/docs#readme). So, it is crucial to pick restriction enzyme that does not cut mobile genetic elements and has only one restriction site on the plasmid. If the majority of the reads are not longer than the the original length of the plasmid, this may be explained by scenarios such as mutations on selective genes in plasmid or the mobile element excisions.
 
 As an example output (Figure 1):
 
@@ -34,8 +33,7 @@ Figure 1: Non weighted histogram graph of plasmid reads.
 
 ## Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [FiltLong](https://github.com/rrwick/Filtlong) or 
-- If you want to filter only length-based (you do not need FiltLong) you can use the Python script under extra folder (extra/01_filtering_based_on_len.py)
+- [FiltLong](https://github.com/rrwick/Filtlong) or If you want to filter only length-based (you do not need FiltLong) you can use the [Python script](/extra/01_filtering_based_on_len.py) under extra folder
 
 ```
 filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
@@ -49,7 +47,7 @@ filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
 
-In the directory where the demultiplexed barcode folders are located, you can use scripts/01_data_prep.sh. In this script, the alignment section has the code for mapping the fastq files inside the folders to plasmid and also genome.
+In the directory where the demultiplexed barcode folders are located, you can use [the data prep script](/scripts/01_data_prep.sh). In this script, the alignment section has the code for mapping the fastq files inside the folders to plasmid and also genome.
 
 
 ## 4. Insertion Finder
