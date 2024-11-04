@@ -177,7 +177,7 @@ for name, group in grouped:
     plt.xlabel('Insertion Point')
     plt.ylabel('Frequency')
 
-    # Histogramı kaydetme
+    # Saving histograms
     plt.savefig(os.path.join(output_folder, f'{safe_name}_insertion_points_histogram.pdf'))
     plt.close()
 
