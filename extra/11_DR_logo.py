@@ -107,7 +107,7 @@ def get_best_alignment_length(alignment):
     return most_common_length
 
 # 4. Logo creating
-def create_sequence_logo(alignment, best_length, output_file, safe_name, plasmid_len):
+def create_sequence_logo(alignment, best_length, output_file, safe_name):
 
     sequences = [str(record)[:best_length].upper() for record in alignment]
     
@@ -186,5 +186,5 @@ for name, group in grouped:
         print(f'len of alignment {alignment} is not enough! skipping {safe_name}')
     else:
         best_length = get_best_alignment_length(alignment)  # 3. En iyi uzunluk
-        create_sequence_logo(alignment, best_length, os.path.join(output_folder, f'{safe_name}_overlap_sequence_logo.pdf'),safe_name,plasmid_len)  # 4. Sekans logosu ve kaydetme
+        create_sequence_logo(alignment, best_length, os.path.join(output_folder, f'{safe_name}_overlap_sequence_logo.pdf'),safe_name)  # 4. Sekans logosu ve kaydetme
 
