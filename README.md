@@ -59,6 +59,35 @@ You can also look the docs section [to understand sam file and CIGAR strings](/d
 
 ## 4. Insertion Finder
 
+### 4.1 Manually curated Transposons
+
+
+### 4.2 Stats of Transposons
+
+
+### 4.3 Heatmap of Transposons
+
+
+## 5. Insertion Points and DR Finder
+
+
+### 5.1 Insertion Coordinates
+
+
+### 5.2 DR Sequence Logos
+
+
+### 5.3 Kde Plots 
+
+
+## 6. Mutation and Variant Analysis 
+
+
+## 7. Small deletions and insertions (Possible Excisions)
+
+
+
+
 
 
 
