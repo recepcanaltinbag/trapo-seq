@@ -30,6 +30,7 @@ Figure 1: Non weighted histogram graph of plasmid reads.
 
 ## 2. Filtering
 
+To eliminate the shorter reads, it is essential to filter. We want long reads to capture the traposons as a whole, so it may be better to filter reads lower than 2kb length. But this threshold value can change according to the histograms and the yout plasmid length. In ideal world, it may be better to eliminate reads shorter than the plasmid length, however sometimes  [different cases](/docs#undesired-cases) can be happen.
 
 ## Requirements
 - Basecalled and barcode demultiplexed .fastq files
