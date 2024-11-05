@@ -253,7 +253,7 @@ for read_id, alignments in read_info.items():
         for each_temp_ins in temp_ins:
             #print(f"Read ID: {read_id}", alignment['reverse'])
             ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1])
-            new_ins.append((each_temp_ins[0],each_temp_ins[1],each_temp_ins[2],ref,'SC'))
+            new_ins.append((each_temp_ins[0],each_temp_ins[1]+1,each_temp_ins[2],ref,'SC')) #+1 for 0-based
         reads_insertions[read_id] = new_ins
         print(reads_insertions[read_id], alignment['reverse'])
         
