@@ -6,7 +6,7 @@
 #It is also tested for bwa-mem. But, for bwa-mem outputs I saw that insertions are not soft clipped but splitting the alignments to pieces. But, thats not a problem.
 
 #INPUT: BAM FILE, and threshold for filtering insertions
-#OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\n"
+#OUTPUT: TAB FILE in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\t{is_reverse}\n"
 
 #Recep Can Altınbağ, 22 10 2024, v0.2
 #-------------------------------------
@@ -104,7 +104,7 @@ def get_middle_inserts(bamfile, insertion_threshold):
                 if inserts != []:
                     insert_list = []
                     for insert in inserts:
-                        insert_list.append((insert[0], insert[0] + insert[1], insert[1], insert[2], 'IN')) #insert 2 is ref position
+                        insert_list.append((insert[0], insert[0] + insert[1], insert[1], insert[2], 'IN', read.is_reverse)) #insert 2 is ref position
                     reads[read_id] = insert_list
     return reads
 
@@ -166,9 +166,9 @@ def filter_and_write_read_ids(read_data, output_file, threshold, quality):
     with open(output_file, 'w') as f:
         for read_id, sequences in read_data.items():
             for seq in sequences:
-                start, end, length, ref_pos, insert_type = seq
+                start, end, length, ref_pos, insert_type, is_reverse = seq
                 if length > threshold:
-                    f.write(f"{read_id}\t{start}\t{end}\t{length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\n")
+                    f.write(f"{read_id}\t{start}\t{end}\t{length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\t{is_reverse}\n")
 
 
 #In splitted alignments, it is not easy to understand reference position, so this function gives the closest point!
@@ -222,7 +222,7 @@ def find_nearest_reference(align_table, start, end):
 bamfile = "sorted.bam"
 insertion_threshold = 500
 # OUTPUTS
-output_file = "filtered_read_insertions_minimap2_with_refs.txt"
+output_file = "filtered_read_insertions_minimap2_with_refs_v3.txt"
 #----------------------------------------------------
 
 read_info, read_len_dict = get_read_info(bamfile, insertion_threshold)
@@ -253,7 +253,7 @@ for read_id, alignments in read_info.items():
         for each_temp_ins in temp_ins:
             #print(f"Read ID: {read_id}", alignment['reverse'])
             ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1])
-            new_ins.append((each_temp_ins[0],each_temp_ins[1]+1,each_temp_ins[2],ref,'SC')) #+1 for 0-based
+            new_ins.append((each_temp_ins[0],each_temp_ins[1]+1,each_temp_ins[2],ref,'SC', alignment['reverse'])) #+1 for 0-based
         reads_insertions[read_id] = new_ins
         print(reads_insertions[read_id], alignment['reverse'])
         
