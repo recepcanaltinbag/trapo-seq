@@ -48,6 +48,7 @@ for dir in */; do
     [ ! -f "$ALIGNED_PL" ] && minimap2 -ax map-ont "$QUERY_FASTA" "$FILTERED_FASTQ" > "$ALIGNED_PL"
     [ ! -f "$MAPPED_PL" ] && samtools view -bS -F 4 "$ALIGNED_PL" > "$MAPPED_PL"
     [ ! -f "$SORTED_MAPPED_PL" ] && samtools sort "$MAPPED_PL" -o "$SORTED_MAPPED_PL"
+    samtools index "$SORTED_MAPPED_PL"
     [ ! -f "$MAPPED_PL_FQ" ] && samtools fastq "$MAPPED_PL" > "$MAPPED_PL_FQ"
     [ ! -f "$ALIGNED_GN" ] && minimap2 -ax map-ont "$GENOME" "$MAPPED_PL_FQ" > "$ALIGNED_GN"
     [ ! -f "$ALIGNED_GN_BM" ] && samtools view -bS "$ALIGNED_GN" > "$ALIGNED_GN_BM"
