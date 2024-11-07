@@ -60,10 +60,16 @@ You can also look the docs section [to understand sam file and CIGAR strings](/d
 ## 4. Insertion Finder
 
 
+Output of this step creates a tabular file in the format of:
 
 | read_id | query_start | query_end | insertion_length | ref_pos | quality | insert_type | is_reverse |
 |---------|-------------|-----------|------------------|---------|---------|-------------|------------|
 | read_1  |      100   |    1200       |    1180       | 4093      |   98  |  [IN, SC]   |   True     |
+
+
+folder_name
+---> folder_name.fasta
+---> folder_name_best_alignments.fasta
 
 
 
@@ -84,6 +90,8 @@ You can also look the docs section [to understand sam file and CIGAR strings](/d
 |----------|------------|--------------|-------|---------|-------------|-----------|---------------|-------------|------|-----------|---------|------------|
 |   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  20  |  IS_DB     |   98   |    4000    |  True   |
 
+
+### 5.1 Examining the novel inserts
 
 ## 6. Insertion Points and DR Finder
 
