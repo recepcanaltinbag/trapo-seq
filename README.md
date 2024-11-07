@@ -59,6 +59,14 @@ You can also look the docs section [to understand sam file and CIGAR strings](/d
 
 ## 4. Insertion Finder
 
+
+
+| read_id | query_start | query_end | insertion_length | ref_pos | quality | insert_type | is_reverse |
+|---------|-------------|-----------|------------------|---------|---------|-------------|------------|
+| read_1  |      100   |    1200       |    1180       | 4093      |   98  |  [IN, SC]   |   True     |
+
+
+
 ### 4.1 Manually curated Transposons
 
 
@@ -68,22 +76,31 @@ You can also look the docs section [to understand sam file and CIGAR strings](/d
 ### 4.3 Heatmap of Transposons
 
 
-## 5. Insertion Points and DR Finder
+
+## 5. Annotation of Insertions
 
 
-### 5.1 Insertion Coordinates
+| Query ID | Subject ID | Identity (%) | Score | E-value | Query Start | Query End | Subject Start | Subject End | Note | Explained | ref_pos | is_Reverse |
+|----------|------------|--------------|-------|---------|-------------|-----------|---------------|-------------|------|-----------|---------|------------|
+|   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  20  |  IS_DB     |   98   |    4000    |  True   |
 
 
-### 5.2 DR Sequence Logos
+## 6. Insertion Points and DR Finder
 
 
-### 5.3 Kde Plots 
+### 6.1 Insertion Coordinates
 
 
-## 6. Mutation and Variant Analysis 
+### 6.2 DR Sequence Logos
 
 
-## 7. Small deletions and insertions (Possible Excisions)
+### 6.3 Kde Plots 
+
+
+## 7. Mutation and Variant Analysis 
+
+
+## 8. Small deletions and insertions (Possible Excisions)
 
 
 
