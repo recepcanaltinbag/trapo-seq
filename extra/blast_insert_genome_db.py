@@ -16,15 +16,18 @@
 #OUTPUT: TAB FILE in the format: "Query ID\tSubject ID\tIdentity (%)\tScore\tE-value\tQuery Start\tQuery End\tSubject Start\tSubject End\tNote\tExplained\tref_pos\tis_Reverse\n"
 
 
-#Recep Can Altınbağ, 06 11 2024, v0.1
+#Recep Can Altınbağ, 07 11 2024, v0.2
 #-------------------------------------
 
 import time
 import sys
 import os
+import shutil
 from Bio import SeqIO
 from Bio.Blast import NCBIXML
 from Bio.Blast.Applications import NcbiblastnCommandline
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
 
 def read_tab_file(file_path):
     tab_data = []
@@ -40,7 +43,7 @@ def read_tab_file(file_path):
             ref_pos = fields[4]
             quality = int(fields[5])
             insert_type = fields[6]
-            if fields[7] == True:
+            if fields[7] == "True":
                 is_reverse = True
             else:
                 is_reverse = False
@@ -70,7 +73,7 @@ def overlap(hsp1, hsp2):
     return hsp1.query_start <= hsp2.query_end and hsp2.query_start <= hsp1.query_end
 
 
-def process_blast_results(xml_output, type_i, is_fasta):
+def process_blast_results(xml_output, type_i, is_fasta, partial_threshold, partial_len):
     best_alignments = []
     alignments = []
     with open(xml_output) as result_handle:
@@ -88,18 +91,18 @@ def process_blast_results(xml_output, type_i, is_fasta):
                         continue  # Skip if E-value is zero
                     to_continue_from_partial_IS = False
                     if type_i == "is":    
-                        if abs(hsp.sbjct_end - hsp.sbjct_start + 1) / alignment.length * 100 < 70:
-                            to_continue_from_parital_IS = True
+                        if abs(hsp.sbjct_end - hsp.sbjct_start + 1) / alignment.length * 100 < partial_threshold and alignment.length > partial_len:
+                            to_continue_from_partial_IS = True
                     
                     if to_continue_from_partial_IS:
                         continue # Skip if there is no enough coverage for IS DB elements
-                            
+                          
                     #print(hsp)
                     #print(hsp.align_length, hsp.sbjct_end,  hsp.sbjct_start)
                     
-                    coverage_percentage = abs(hsp.sbjct_end - hsp.sbjct_start + 1) / hsp.align_length * 100
-                    if coverage_percentage < 80: #Eliminate lower than 80 coverage
-                        continue
+                    #coverage_percentage = abs(hsp.sbjct_end - hsp.sbjct_start + 1) / hsp.align_length * 100
+                    #if coverage_percentage < 70: #Eliminate lower than 80 coverage
+                    #    continue
 
                     keep = True
                     for kept_alignment in alignments_to_keep:
@@ -156,7 +159,7 @@ def process_blast_results(xml_output, type_i, is_fasta):
 
 
 #For writing to the file
-def align_to_csv(out_str_list, alignment, note, coverage, ref_pos, is_reverse, sequence):
+def align_to_csv(out_str_list, alignment, note, coverage, ref_pos, is_reverse):
     
     out_str_list.append(f"{alignment['Query ID']}\t{alignment['Subject ID']}\t{alignment['Identity (%)']}\t"
                    f"{alignment['Score']}\t{alignment['E-value']}\t{alignment['Query Start']}\t"
@@ -165,17 +168,11 @@ def align_to_csv(out_str_list, alignment, note, coverage, ref_pos, is_reverse, s
     return out_str_list
 
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+
 
 def perform_blast(query_fasta, db_fasta, db_name, xml_output, tab_output):
-    # Veritabanının olup olmadığını kontrol et, yoksa oluştur
-    db_files = [f"{db_name}.{ext}" for ext in ['nin', 'nhr', 'nsq']]
-    if not all(os.path.isfile(file) for file in db_files):
-        os.system(f"makeblastdb -in {db_fasta} -dbtype nucl -out {db_name}")
-
-    # Hem XML hem de TAB formatında çıktı alarak BLAST çalıştır
     os.system(f"blastn -query {query_fasta} -db {db_name} -out {xml_output} -outfmt 5")
-    #os.system(f"blastn -query {query_fasta} -db {db_name} -out {tab_output} -outfmt 6") uncomment just for debugging :)
+    #os.system(f"blastn -query {query_fasta} -db {db_name} -out {tab_output} -outfmt 6") uncommented, just for debugging :)
 
 # Function to handle each read_id’s processing, including perform_blast
 def process_read(read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, tab_data, genom_fasta, temp_dir, mapped_fasta):
@@ -197,7 +194,8 @@ def simple_loading_bar(current, total):
     print(f"\rProcessing: [{bar}] {progress}% ({current}/{total})", end='', flush=True)
 
 
-def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold=70, max_workers = 2):
+def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold=70, max_workers = 2, debug=False, temp_value=False, partial_threshold = 80, partial_len = 8000):
+    print(f'Settings: Threshold: {threshold}, Threads: {max_workers}, Debugging: {debug}, Partial Threshold: {partial_threshold}, Partial Len: {partial_len}')
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
     
@@ -206,6 +204,15 @@ def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, th
     len_of_tab = len(tab_data)
     print('Blast Process of ', len_of_tab)
 
+
+    # Veritabanının olup olmadığını kontrol et, yoksa oluştur
+    db_files = [f"genom_db.{ext}" for ext in ['nin', 'nhr', 'nsq']]
+    if not all(os.path.isfile(file) for file in db_files):
+        os.system(f"makeblastdb -in {genom_fasta} -dbtype nucl -out genom_db")
+    db_files = [f"is_db.{ext}" for ext in ['nin', 'nhr', 'nsq']]
+    if not all(os.path.isfile(file) for file in db_files):
+        os.system(f"makeblastdb -in {is_fasta} -dbtype nucl -out is_db")
+    
     #print_progress_bar(index, len_of_tab, prefix='Processing', length=40)
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [
@@ -216,61 +223,70 @@ def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, th
         # Wait for all tasks to complete
         for i, future in enumerate(futures):
             future.result()  # This will raise any exception that occurred
-            simple_loading_bar(i + 1, len(futures))  # Yükleme çubuğunu güncelle
+            simple_loading_bar(i + 1, len(futures)) 
 
 
-    print('Blast Processes were Ended')
+    print('\nBlast Processes were Ended')
     print('Time to process results')
 
-    for read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, *_ in tab_data:
-        sequence = extract_sequence(mapped_fasta, read_id, query_start, query_end)
-        if sequence:
-            #fasta_path = save_to_temp_fasta(sequence, temp_dir, read_id, query_start, query_end)
+    for i, (read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, *_) in enumerate(tab_data):
+
+        if not debug:
+            simple_loading_bar(i + 1, len_of_tab)  # Yükleme çubuğunu güncelle
+
+        #fasta_path = save_to_temp_fasta(sequence, temp_dir, read_id, query_start, query_end)
             
-            # Blasting and temp files etc.
-            genom_blast_xml = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_genom_blast.xml")
-            genom_blast_tab = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_genom_blast.tab")
-            #perform_blast(fasta_path, genom_fasta, "genom_db", genom_blast_xml, genom_blast_tab)
+        # Blasting and temp files etc.
+        genom_blast_xml = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_genom_blast.xml")
+        genom_blast_tab = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_genom_blast.tab")
+        #perform_blast(fasta_path, genom_fasta, "genom_db", genom_blast_xml, genom_blast_tab)
                 
-            is_blast_xml = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_is_blast.xml")
-            is_blast_tab = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_is_blast.tab")
-            #perform_blast(fasta_path, is_fasta, "is_db", is_blast_xml, is_blast_tab)
+        is_blast_xml = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_is_blast.xml")
+        is_blast_tab = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_is_blast.tab")
+        #perform_blast(fasta_path, is_fasta, "is_db", is_blast_xml, is_blast_tab)
                 
-            # Proces blast outputs
-            genom_alignments = process_blast_results(genom_blast_xml, 'genome', None)
-            is_alignments = process_blast_results(is_blast_xml, 'is', is_fasta)
+        # Proces blast outputs
+        genom_alignments = process_blast_results(genom_blast_xml, 'genome', None, partial_threshold, partial_len)
+        is_alignments = process_blast_results(is_blast_xml, 'is', is_fasta, partial_threshold, partial_len)
                 
+        genom_dict = {alignment['Query ID']: alignment for alignment in genom_alignments} # dict for fast access
 
-            genom_dict = {alignment['Query ID']: alignment for alignment in genom_alignments} # dict for fast access
+        # Main Logic: Look to the IS DB, if not enough look genome, if not enough classify as contamination!
+        for alignment in is_alignments:
 
-            # Main Logic: Look IS DB, if not enough look genome, if not enough classify as contamination!
-            for alignment in is_alignments:
-
-                if (abs(alignment['Query Start'] - alignment['Query End'])/ alignment['Query Length'] )*100 < threshold or alignment['Score'] == 'N/A':
-                    genom_start = genom_dict[alignment['Query ID']]['Query Start']
-                    genom_end = genom_dict[alignment['Query ID']]['Query End']
-                    exp_coverage = abs(genom_start - genom_end)/alignment['Query Length'] * 100
-                    if genom_dict[alignment['Query ID']]['Score'] == 'N/A' or exp_coverage < threshold:
+            if (abs(alignment['Query Start'] - alignment['Query End'])/ alignment['Query Length'] )*100 < threshold or alignment['Score'] == 'N/A':
+                genom_start = genom_dict[alignment['Query ID']]['Query Start']
+                genom_end = genom_dict[alignment['Query ID']]['Query End']
+                exp_coverage = abs(genom_start - genom_end)/alignment['Query Length'] * 100
+                if genom_dict[alignment['Query ID']]['Score'] == 'N/A' or genom_dict[alignment['Query ID']] == 'no blast hit':
+                    if debug:
                         print(read_id, 'No genome alignment, probably a contamination or wrong barcode or sequencing artifact!, Read Quality: ', qual)
-                        out_str_list = align_to_csv(out_str_list, genom_dict[alignment['Query ID']], 'Contamination', 0, ref_pos, is_reverse, sequence)
-                    else:
-                        print(read_id, 'Explained with Genome: ', abs(genom_start - genom_end)/alignment['Query Length'] * 100 )
-                        out_str_list = align_to_csv(out_str_list, genom_dict[alignment['Query ID']], 'Genome', exp_coverage, ref_pos, is_reverse, sequence)
-                        #print('In genome: ', genom_dict[alignment['Query ID']]['Subject Start'], genom_dict[alignment['Query ID']]['Subject End'])
-                        #print('No align on IS', genom_dict[alignment['Query ID']])
+                    out_str_list = align_to_csv(out_str_list, genom_dict[alignment['Query ID']], 'Contamination', 0, ref_pos, is_reverse)
                 else:
-                    out_str_list = align_to_csv(out_str_list, alignment, 'IS_DB', (abs(alignment['Query Start'] - alignment['Query End'])/ alignment['Query Length'] )*100, ref_pos, is_reverse, sequence)
+                    if debug:
+                        print(read_id, 'Explained with Genome: ', exp_coverage )
+                    out_str_list = align_to_csv(out_str_list, genom_dict[alignment['Query ID']], 'Genome', exp_coverage, ref_pos, is_reverse)
+                    #print('In genome: ', genom_dict[alignment['Query ID']]['Subject Start'], genom_dict[alignment['Query ID']]['Subject End'])
+                    #print('No align on IS', genom_dict[alignment['Query ID']])
+            else:
+                out_str_list = align_to_csv(out_str_list, alignment, 'IS_DB', (abs(alignment['Query Start'] - alignment['Query End'])/ alignment['Query Length'] )*100, ref_pos, is_reverse)
+                if debug:
                     print(read_id, 'On manually curated IS DB')
-                #if "3a95b9e1" in alignment['Query ID']:
-                #    print(alignment['Query Start'], alignment['Query End'], alignment['Query Length'])
-                #    (abs(alignment['Query Start'] - alignment['Query End'])/ alignment['Query Length'] )*100
-                #    input()
+            #if "3a95b9e1" in alignment['Query ID']:
+            #    print(alignment['Query Start'], alignment['Query End'], alignment['Query Length'])
+            #    (abs(alignment['Query Start'] - alignment['Query End'])/ alignment['Query Length'] )*100
+            #    input()
    
     with open(output_csv, 'w') as out_file:
         out_file.write("Query ID\tSubject ID\tIdentity (%)\tScore\tE-value\tQuery Start\tQuery End\tSubject Start\tSubject End\tNote\tExplained\tref_pos\tis_Reverse\n")    
         out_file.write(''.join(out_str_list))
+    
+    if not temp_value:
+        # Delet temp
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
 
-    print(f"Outputs {output_csv} were recorded.")
+    print(f"\nOutputs {output_csv} were recorded.")
 
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
@@ -282,8 +298,12 @@ is_fasta = "BIOMIG_cleaned_IS.fasta"
 temp_dir = "temp"
 threads = 16
 threshold = 70
+debug = False
+temp_value = True
+partial_threshold = 80
+partial_len = 8000
 # OUTPUTS
-output_csv = "best_alignments.csv"
+output_csv = "best_alignments.tab"
 #----------------------------------------------------
 
-main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold, threads)
+main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold, threads, debug, temp_value, partial_threshold, partial_len)
