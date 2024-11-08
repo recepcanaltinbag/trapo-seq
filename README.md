@@ -23,7 +23,7 @@
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
   - [Possible Excisions](#possible-excisions) 
 - [FAQ](#faq)
-  - [How Can I Cite Picota](#how-can-i-cite)
+  - [How Can I Cite trapo-seq](#how-can-i-cite)
 - [License](#license)
 
 
