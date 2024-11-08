@@ -45,7 +45,6 @@ def main():
     if args.command == "read_histogram":
         if args.verbose:
             print('Histograms')
-            
         else:
             print("Histograms...")
             plot_histogram(args.fastq, args.output)
