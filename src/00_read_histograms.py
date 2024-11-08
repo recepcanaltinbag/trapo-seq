@@ -54,13 +54,15 @@ def determine_bin_size(read_lengths):
     
     return bin_size
 
-def plot_histogram(read_lengths, output):
+def plot_histogram(fastq_file, output):
     """
     Plots a histogram of the read lengths with a dynamically calculated bin size.
     
     Parameters:
     read_lengths (list): A list of read lengths.
     """
+    read_lengths = calculate_read_lengths(fastq_file)
+
     # Determine bin size dynamically
     bin_size = determine_bin_size(read_lengths)
     
@@ -87,10 +89,7 @@ fastq_file = "5bac_4000filtered.fastq"
 # OUTPUTS
 output = "Read_len_histogram"
 #----------------------------------------------------
-
-# Step 1: Calculate read lengths
-read_lengths = calculate_read_lengths(fastq_file)
     
-# Step 2: Plot the histogram
-plot_histogram(read_lengths, output)
+#Plot the histogram
+plot_histogram(fastq_file, output)
 
