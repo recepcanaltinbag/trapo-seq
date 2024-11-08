@@ -33,7 +33,7 @@
 
 
 
-trap-seq is a traposome sequencing pipeline for plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements  that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
+**trapo-seq** is a traposome sequencing pipeline for plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements  that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
 
 First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
