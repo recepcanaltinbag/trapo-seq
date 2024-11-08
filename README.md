@@ -2,15 +2,46 @@
 
 ### Traposome Sequencing with Long Read Technologies
 
+
+
+- [Test](#test)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+  - [Input Data Analysis](##input-data-analysis)
+  - [Read Length Histograms](##read-length-histograms)
+  - [Alignment](##alignment)
+  - [Insertion Finder](##insertion-finder)
+    - [Manually curated Transposons](###manually-curated-transposons)
+    - [Stats of Transposons](###stats-of-transposons)
+    - [Heatmap of Transposons](###heatmap-of-transposons)
+  - [Annotation of Insertions](##annotation-of-insertions)
+    - [Examining the novel inserts](###examining-the-novel-inserts)
+    - [Insertion Coordinates](###insertion-coordinates)
+    - [DR Finder](###dr-finder)
+    - [DR Sequence Logos](###dr-sequence-logos)
+    - [Kde Plots](###kde-plots)
+  - [Mutation and Variant Analysis](##mutation-and-variant-analysis)
+  - [Possible Excisions](##possible-excisions) 
+- [FAQ](#faq)
+  - [How Can I Cite Picota](#how-can-i-cite)
+- [License](#license)
+
+
+
+
+
+
+
+
 trap-seq is a traposome sequencing pipeline for plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements  that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
 
 First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
-## Input Data Analysis
+# Input Data Analysis
 
-## 1. Read Length Histograms
+## Read Length Histograms
 
-## Requirements
+### Requirements
 - Basecalled and barcode demultiplexed .fastq files
 - [NanoPlot](https://github.com/wdecoster/NanoPlot) or If you want to visualize without using NanoPlot you can use the [Python script](/extra/00_read_histograms.py) under extra folder.
 
@@ -28,11 +59,11 @@ There are fragmented reads around 1kb, but most of reads are longer than 5kb. Al
 
 Figure 1: Non weighted histogram graph of plasmid reads.
 
-## 2. Filtering
+## Filtering
 
 To eliminate the shorter reads, it is essential to filter. We want long reads to capture the traposons as a whole, so it may be better to filter reads lower than 2kb length. But this threshold value can change according to the histograms and your plasmid length. In an ideal world, it may be better to eliminate reads shorter than the plasmid length, however sometimes [different cases](/docs#undesired-cases) can happen.
 
-## Requirements
+### Requirements
 - Basecalled and barcode demultiplexed .fastq files
 - [FiltLong](https://github.com/rrwick/Filtlong) or If you want to filter only length-based (you do not need FiltLong) you can use the [Python script](/extra/01_filtering_based_on_len.py) under extra folder.
 
@@ -41,9 +72,9 @@ filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
 
 ```
 
-## 3. Alignment
+## Alignment
 
-## Requirements
+### Requirements
 - Filtered .fastq files
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
@@ -57,7 +88,7 @@ During barcoding, different barcodes can get mixed up with other barcodes or tha
 You can also look the docs section [to understand sam file and CIGAR strings](/docs#understanding-cigar-string). If you want to analyse your data with different tools than minimap2, the insertion finding algorithm can need some adjustments. I tested it with [bwa-mem](https://github.com/lh3/bwa), and it is working fine but I do not know others.
 
 
-## 4. Insertion Finder
+## Insertion Finder
 
 
 Output of this step creates a tabular file in the format of:
@@ -67,48 +98,55 @@ Output of this step creates a tabular file in the format of:
 | read_1  |      100   |    1200       |    1180       | 4093      |   98  |  [IN, SC]   |   True     |
 
 
-folder_name
----> folder_name.fasta
----> folder_name_best_alignments.fasta
+Folder structure and expected naming:
+```
+|-- folder_name
+  |-- folder_name.fasta
+  |-- folder_name_best_alignments.fasta
+```
+
+
+### Manually curated Transposons
+
+
+### Stats of Transposons
+
+
+### Heatmap of Transposons
 
 
 
-### 4.1 Manually curated Transposons
-
-
-### 4.2 Stats of Transposons
-
-
-### 4.3 Heatmap of Transposons
-
-
-
-## 5. Annotation of Insertions
+## Annotation of Insertions
 
 
 | Query ID | Subject ID | Identity (%) | Score | E-value | Query Start | Query End | Subject Start | Subject End | Note | Explained | ref_pos | is_Reverse |
 |----------|------------|--------------|-------|---------|-------------|-----------|---------------|-------------|------|-----------|---------|------------|
-|   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  20  |  IS_DB     |   98   |    4000    |  True   |
+|   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  IS_DB  |  98     |   4000   |    True     |
 
 
-### 5.1 Examining the novel inserts
-
-## 6. Insertion Points and DR Finder
+### Examining the novel inserts
 
 
-### 6.1 Insertion Coordinates
+
+### Insertion Coordinates
 
 
-### 6.2 DR Sequence Logos
+### DR Finder
 
 
-### 6.3 Kde Plots 
+### DR Sequence Logos
 
 
-## 7. Mutation and Variant Analysis 
+
+### Kde Plots 
 
 
-## 8. Small deletions and insertions (Possible Excisions)
+
+## Mutation and Variant Analysis 
+
+
+
+## Possible Excisions
 
 
 
