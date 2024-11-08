@@ -1,6 +1,6 @@
 import argparse
 from src.a_read_histograms import plot_histogram
-
+from src.b_filtering_based_on_len import filter_fastq_by_length
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -27,10 +27,19 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     # islem1 alt komutunu ekleme
-    islem1_parser = subparsers.add_parser("read_histogram", help="creates histogram of reads based on lengths")
-    islem1_parser.add_argument("-v", "--verbose", action="store_true", help="Extented output")
-    islem1_parser.add_argument("-f", "--fastq", type=str, required=True, help="Path of fastq file")
-    islem1_parser.add_argument("-o", "--output", type=str, required=True, help="path of output")
+    read_histogram_parser = subparsers.add_parser("read_histogram", help="creates histogram of reads based on lengths")
+    read_histogram_parser.add_argument("-v", "--verbose", action="store_true", help="Extented output")
+    read_histogram_parser.add_argument("-f", "--fastq", type=str, required=True, help="Path of fastq file")
+    read_histogram_parser.add_argument("-o", "--output", type=str, required=True, help="path of output")
+
+
+    filter_parser = subparsers.add_parser("filter", help="filter reads based on lengths")
+    filter_parser.add_argument("-f", "--fastq", type=str, required=True, help="Path of fastq file")
+    filter_parser.add_argument("-o", "--output", type=str, required=True, help="path of output filtered fastq file")
+    filter_parser.add_argument("-l", "--length", type=int, default=1000, help="len of filter")
+
+
+
 
 
     # islem2 alt komutunu ekleme
@@ -41,13 +50,19 @@ def main():
     # Argümanları ayrıştırma
     args = parser.parse_args()
 
-    # Komutları çalıştırma
+    #A_READ_HISTOGRAMS
     if args.command == "read_histogram":
         if args.verbose:
             print('Histograms')
         else:
             print("Histograms...")
             plot_histogram(args.fastq, args.output)
+    #B_FILTER
+    elif args.command == "filter":
+        print(f"Filter process, Input: {args.fastq}, Output: {args.output}, Filter Len: {args.length}")
+        filter_fastq_by_length(args.fastq, args.output, args.length)
+        print('Filter process was ended')          
+    #
     elif args.command == "islem2":
         print(f"İşlem 2 çalıştırılıyor, parametre: {args.parametre}, tekrar sayısı: {args.number}")
     else:
