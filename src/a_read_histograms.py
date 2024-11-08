@@ -7,7 +7,6 @@
 #Recep Can Altınbağ, 24 10 2024, v0.0
 #-------------------------------------
 
-
 import matplotlib.pyplot as plt
 import math
 
@@ -83,12 +82,13 @@ def plot_histogram(fastq_file, output):
 # EXAMPLE USAGE -------------------------------------
 # INPUTS
 # Path to the FASTQ file (replace with your file path)
-fastq_file = "5bac_4000filtered.fastq"
+
+#fastq_file = "5bac_4000filtered.fastq"
 
 # OUTPUTS
-output = "Read_len_histogram"
+#output = "Read_len_histogram"
 #----------------------------------------------------
     
 #Plot the histogram
-plot_histogram(fastq_file, output)
+#plot_histogram(fastq_file, output)
 
