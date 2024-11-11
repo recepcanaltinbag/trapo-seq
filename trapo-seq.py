@@ -1,6 +1,7 @@
 import argparse
 from src.a_read_histograms import plot_histogram
 from src.b_filtering_based_on_len import filter_fastq_by_length
+from src.a_data_mapping import main_mapping
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -39,7 +40,11 @@ def main():
     filter_parser.add_argument("-l", "--length", type=int, default=1000, help="len of filter")
 
 
-
+    filter_parser = subparsers.add_parser("map", help="map reads to plasmid and genome")
+    filter_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of fastq file including folders")
+    filter_parser.add_argument("-p", "--plasmid", type=str, required=True, help="Path of trap plasmid in fasta format")
+    filter_parser.add_argument("-g", "--genome", type=str, required=True, help="path of genome in fasta format")
+    filter_parser.add_argument("-f", "--force", action="store_true", help="Force overwrite if the file exists")
 
 
     # islem2 alt komutunu ekleme
@@ -63,6 +68,35 @@ def main():
         filter_fastq_by_length(args.fastq, args.output, args.length)
         print('Filter process was ended')          
     #
+    #C_ALIGNMENT
+    elif args.command == "map":
+        print(f"\nMapping process\n, Input Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
+        main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
+        print('Mapping process was ended')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     elif args.command == "islem2":
         print(f"İşlem 2 çalıştırılıyor, parametre: {args.parametre}, tekrar sayısı: {args.number}")
     else:
