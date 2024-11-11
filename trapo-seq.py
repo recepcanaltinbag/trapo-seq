@@ -47,6 +47,11 @@ def main():
     filter_parser.add_argument("-f", "--force", action="store_true", help="Force overwrite if the file exists")
 
 
+
+
+
+
+
     # islem2 alt komutunu ekleme
     islem2_parser = subparsers.add_parser("islem2", help="İşlem 2'yi çalıştırır")
     islem2_parser.add_argument("-p", "--parametre", type=str, required=True, help="İşlem 2 için gerekli parametre")

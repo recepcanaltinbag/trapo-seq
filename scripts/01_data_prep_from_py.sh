@@ -1,5 +1,52 @@
 #!/bin/bash
 
+#!/bin/bash
+
+# Function to count reads in a FastQ file
+count_reads_in_fastq() {
+    local fastq_file=$1
+    # Count total lines and divide by 4 to get read count
+    local read_count=$(wc -l < "$fastq_file")
+    echo $((read_count / 4))
+}
+
+
+
+# Function to summarize the mappings
+summarize_mappings() {
+    local plasmid_reads_file=$1
+    local genome_reads_file=$2
+    local output_txt=$3
+    local fastq_file=$4
+
+    # Count reads in the FastQ file
+    total_reads=$(count_reads_in_fastq "$fastq_file")
+    echo "Total reads: $total_reads"
+
+    # Calculate mapped reads, plasmid only, and genome only
+    plasmid=$(samtools view -F 4 "$plasmid_reads_file" | cut -f1 | sort | uniq | wc -l)    
+    both=$(samtools view -F 4 "$genome_reads_file" | cut -f1 | sort | uniq | wc -l) 
+    only_plasmid=$((plasmid - both))
+
+    # Print summary
+    echo "Plasmid: $(echo "$plasmid")"
+    echo "Plasmid only: $(echo "$only_plasmid")"
+    echo "Genome only: $(echo "$both" )"
+    the_rate=$(echo "scale=2; $both / ($both + $only_plasmid)" | bc)    
+    echo "Transposition Rate: $the_rate"
+    
+    # Write to output file
+    {
+        echo "Total reads: $total_reads"
+        echo "Plasmid: $(echo "$plasmid" )"
+        echo "Only Plasmid: $(echo "$only_plasmid")"
+        echo "Both plasmid and genome: $(echo "$both" )"
+        echo "Transposition Rate: $the_rate"
+    } > "$output_txt"
+    
+    echo "Mapping statistics written to $output_txt"
+}
+
 
 for dir in */; do
     cd "$dir" || continue
@@ -37,6 +84,8 @@ for dir in */; do
     ALIGNED_GN="05_aligned_to_other_genome.sam"
     ALIGNED_GN_BM="06_aligned_to_other_genome.bam"
     ALIGNED_GN_ST="07_sorted_aligned_to_other_genome.bam"
+    OUTPUT_STAT="08_mapping_stats.txt"
+
 
     echo ""
     echo -e "\033[33;1m---------INPUTS----------\033[0m"
@@ -162,14 +211,18 @@ for dir in */; do
         if [ "$FORCE" = true ]; then
             echo "Warning: $ALIGNED_GN_ST already exists. Overwriting due to --force flag."
             samtools sort "$ALIGNED_GN_BM" -o "$ALIGNED_GN_ST"
+            samtools index "$ALIGNED_GN_ST"
             # Proceed with the operation (e.g., overwrite or create new file)
         else
             echo "Warning: $ALIGNED_GN_ST already exists. Use --force to overwrite."
+            samtools index "$ALIGNED_GN_ST"
         fi
     else
         # File doesn't exist, proceed with the operation
         echo "$ALIGNED_GN_ST does not exist. Proceeding with the operation."
         samtools sort "$ALIGNED_GN_BM" -o "$ALIGNED_GN_ST"
+        samtools index "$ALIGNED_GN_ST"
+
         # Perform the actual operation (e.g., creating or processing the file)
     fi
 
@@ -190,6 +243,10 @@ for dir in */; do
         sed -n '1~4s/^@/>/p;2~4p' "$MAPPED_PL_FQ" > "${dir%/}.fasta"
         # Perform the actual operation (e.g., creating or processing the file)
     fi
+
+
+    summarize_mappings "$SORTED_MAPPED_PL" "$ALIGNED_GN_ST" "$OUTPUT_STAT" "$FILTERED_FASTQ"
+
 
     cd ..
 done
