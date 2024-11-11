@@ -21,14 +21,9 @@ def main_is_stat(data_dir, out_file):
             print(f"Warning: '{tab_file}' not found. Skipping.")
             continue
 
-
-
         print('Processing the files')
         print(os.path.basename(tab_file))
         #print(os.path.basename(fasta_file))
-
-
-
 
         df_raw = pd.read_csv(tab_file, sep='\t')
         df = df_raw[df_raw['Note'] == 'IS_DB'].copy()

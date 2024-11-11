@@ -29,6 +29,8 @@ def main():
 
     # Ana parser oluşturma
     parser = argparse.ArgumentParser(description="Traposome Sequencing Pipeline")
+    parser.add_argument('--all-help', action='store_true', help="Show complete help message")
+
     subparsers = parser.add_subparsers(dest="command")
 
     # islem1 alt komutunu ekleme
@@ -75,43 +77,51 @@ def main():
     args = parser.parse_args()
 
     #A_READ_HISTOGRAMS
-    if args.command == "read_histogram":
-        if args.verbose:
-            print('Histograms')
-        else:
-            print("Histograms...")
-            plot_histogram(args.fastq, args.output)
-    #B_FILTER
-    elif args.command == "filter":
-        print(f"Filter process, Input: {args.fastq}, Output: {args.output}, Filter Len: {args.length}")
-        filter_fastq_by_length(args.fastq, args.output, args.length)
-        print('Filter process was ended')          
-    #
-    #C_ALIGNMENT
-    elif args.command == "map":
-        print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
-        main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
-        print('Mapping process was ended')
-
-    #E_INSERT_FINDER_FROM_BAM
-    elif args.command == "insert_finder":
-        print(f"\nMapping process\nInput BAM: {args.bam}, \nOutput: {args.output}, \nThreshold: {args.threshold}")
-        main_insert_finder_from_bam(args.bam, args.output, args.threshold)
-
-
-    #G_BLAST_THE_INSERTS_
-    elif args.command == "blast_annot":
-        print(f"\nBlasting to annotate insertions..\n")
-        main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
-
-    #H_IS_Stats
-    elif args.command == "is_stat":
-        print(f"\nStats of ISes..\n")
-        main_is_stat(args.input_dir, args.output)
-
-
+    if args.all_help:
+        parser.print_help()
+        print("\n" + "-"*40 + "\n")
+        for subcommand_name, subcommand_parser in subparsers.choices.items():
+            print(f"\nSubcommand: {subcommand_name}")
+            subcommand_parser.print_help()
+            print("\n" + "-"*40 + "\n")
     else:
-        print("Please enter a command.")
+        if args.command == "read_histogram":
+            if args.verbose:
+                print('Histograms')
+            else:
+                print("Histograms...")
+                plot_histogram(args.fastq, args.output)
+        #B_FILTER
+        elif args.command == "filter":
+            print(f"Filter process, Input: {args.fastq}, Output: {args.output}, Filter Len: {args.length}")
+            filter_fastq_by_length(args.fastq, args.output, args.length)
+            print('Filter process was ended')          
+        #
+        #C_ALIGNMENT
+        elif args.command == "map":
+            print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
+            main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
+            print('Mapping process was ended')
+
+        #E_INSERT_FINDER_FROM_BAM
+        elif args.command == "insert_finder":
+            print(f"\nMapping process\nInput BAM: {args.bam}, \nOutput: {args.output}, \nThreshold: {args.threshold}")
+            main_insert_finder_from_bam(args.bam, args.output, args.threshold)
+
+
+        #G_BLAST_THE_INSERTS_
+        elif args.command == "blast_annot":
+            print(f"\nBlasting to annotate insertions..\n")
+            main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
+
+        #H_IS_Stats
+        elif args.command == "is_stat":
+            print(f"\nStats of ISes..\n")
+            main_is_stat(args.input_dir, args.output)
+
+
+        else:
+            print("Please enter a command.")
 
 
 if __name__ == "__main__":
