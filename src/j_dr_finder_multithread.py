@@ -1,10 +1,9 @@
 import os
 import pandas as pd
-from Bio.Blast.Applications import NcbiblastnCommandline, NcbimakeblastdbCommandline
 from Bio import SeqIO
 import sys
-
-
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 
 def save_to_csv(df, file_path):
@@ -17,22 +16,113 @@ def save_to_csv(df, file_path):
         df.to_csv(file_path, mode='w', header=True, index=False)
 
 
+
+def split_sequences(input_fasta, batch_size, output_dir):
+    """
+    Split the input fasta file into smaller batches.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    sequences = list(SeqIO.parse(input_fasta, "fasta"))
+    batch_count = len(sequences) // batch_size + (1 if len(sequences) % batch_size else 0)
+    
+    batch_files = []
+    for i in range(batch_count):
+        batch_sequences = sequences[i * batch_size: (i + 1) * batch_size]
+        batch_file = os.path.join(output_dir, f"batch_{i+1}.fasta")
+        
+        with open(batch_file, "w") as batch_fasta:
+            SeqIO.write(batch_sequences, batch_fasta, "fasta")
+        
+        batch_files.append(batch_file)
+    
+    return batch_files
+
+
+def get_total_sequences(input_fasta):
+    """
+    Get the total number of sequences in the input FASTA file.
+    """
+    sequences = list(SeqIO.parse(input_fasta, "fasta"))
+    return len(sequences)
+
+def make_blast_db(batch_fasta, db_name):
+    """
+    Create a BLAST database for the given batch fasta file.
+    """
+    subprocess.run(
+        ["makeblastdb", "-in", batch_fasta, "-dbtype", "nucl", "-out", db_name],
+        check=True, 
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL
+    )
+
+def run_blast(query_fasta, db_name, output_file):
+    """
+    Run BLAST on the given query against the given database.
+    """
+    subprocess.run(
+        ["blastn", "-query", query_fasta, "-db", db_name, "-outfmt", "6", "-out", output_file],
+        check=True, 
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL
+    )
+
+def process_blast_m(input_fasta, query_fasta, batch_size, blast_db_dir, output_dir):
+    """
+    Split the database, create BLAST DBs for each batch, run BLAST for the query, and merge the results.
+    """
+    # Step 1: Split the input fasta into smaller batches
+    print("Splitting database into smaller batches...")
+    batch_files = split_sequences(input_fasta, batch_size, blast_db_dir)
+    
+    # Step 2: Run BLAST for each batch
+    output_files = []
+    for idx, batch_file in enumerate(batch_files):
+        simple_loading_bar(idx + 1, len(batch_files))
+        db_name = os.path.join(blast_db_dir, f"batch_{idx+1}_db")
+        output_file = os.path.join(output_dir, f"batch_{idx+1}_blast.out")
+        
+        # Step 2.1: Create BLAST database for this batch
+        #print(f"Creating BLAST DB for {batch_file}...")
+        make_blast_db(batch_file, db_name)
+        
+        # Step 2.2: Run BLAST for the query against the current batch database
+        #print(f"Running BLAST for query against {batch_file}...")
+        run_blast(query_fasta, db_name, output_file)
+        
+        output_files.append(output_file)
+    
+    # Step 3: Merge the output files into one
+    merged_output = os.path.join(output_dir, "merged_blast_results.out")
+    with open(merged_output, "w") as outfile:
+        for file in output_files:
+            with open(file, "r") as infile:
+                outfile.write(infile.read() + "\n")  # Append content from each file
+    
+    print(f"All BLAST results merged into {merged_output}")
+    print('All DBs are ready')
+    return merged_output
+
+
+
+
+
 # BLAST sonuçlarını analiz etmek için fonksiyon
-def analyze_blast_results(blast_output, query_start_csv, query_end_csv, fasta_path, query_file, threshold=200, repeat_th=30):
-    
-    try:
-        df = pd.read_csv(blast_output)
-    except pd.errors.EmptyDataError:
-        print(f"{blast_output} boş ya da okunabilir veri yok.")
-        df = None
-        return []
-    
-    
-    blast_df = pd.read_csv(blast_output, sep='\t', header=None)
-    blast_df.columns = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 
+def analyze_blast_results(query_id, blast_df_raw, query_start_csv, query_end_csv, fasta_path, query_file, threshold=200, repeat_th=30):
+
+
+
+    blast_df_raw.columns = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 
                         'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']
     
-    
+
+    blast_df = blast_df_raw[blast_df_raw['sseqid'] == query_id].copy()
+
+    # Eğer filtreleme sonucunda hiçbir satır kalmazsa None veya uyarı döndür
+    if blast_df.empty:
+        print(f"No rows found for sseqid: {query_id}")
+        return []  # veya uygun bir değer döndürebilirsiniz
     
     for record in SeqIO.parse(query_file, "fasta"):
         sequence = str(record.seq)
@@ -40,6 +130,7 @@ def analyze_blast_results(blast_output, query_start_csv, query_end_csv, fasta_pa
 
     overlaps = []
     #print(blast_df)
+    #input()
     #print(len(blast_df))
 
     if len(blast_df) == 1:
@@ -160,26 +251,79 @@ def analyze_blast_results(blast_output, query_start_csv, query_end_csv, fasta_pa
                 "Overlap Sequence": overlap_sequence})
     return overlaps
 
-def extract_sequence(mapped_fasta_path, read_id):
-    # Ensure query_start and query_end are integers
-    print(mapped_fasta_path)
-    for record in SeqIO.parse(mapped_fasta_path, "fasta"):
-        if record.id == read_id:
-            # Adjust the start and end positions by 200 base pairs
-            #adjusted_start = max(0, query_start - open_gap)  # Ensure start doesn't go below 0
-            #adjusted_end = min(len(record.seq), query_end + open_gap)  # Ensure end doesn't exceed the sequence length
-            
-            # Adjust the sequence and return the modified record
-            #record.seq = record.seq[adjusted_start:adjusted_end]
-            return record
+def copy_fasta(input_fasta, output_fasta):
+    """
+    Verilen FASTA dosyasını alır ve başka bir dosyaya yazar.
     
-    return None
+    :param input_fasta: Okunacak FASTA dosyasının yolu
+    :param output_fasta: FASTA verilerini yazacağımız dosyanın yolu
+    """
+    try:
+        # Girdi dosyasını açma ve çıkış dosyasına yazma
+        with open(input_fasta, 'r') as input_file:
+            with open(output_fasta, 'w') as output_file:
+                # FASTA verilerini kopyala
+                for record in SeqIO.parse(input_file, "fasta"):
+                    SeqIO.write(record, output_file, "fasta")
+        print(f"FASTA data has been successfully written to {output_fasta}")
+    
+    except FileNotFoundError:
+        print(f"Error: {input_fasta} not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 def simple_loading_bar(current, total):
     progress = int((current / total) * 100)
     bar = '=' * (progress // 2) + ' ' * (50 - (progress // 2))
     print(f"\rProcessing: [{bar}] {progress}% ({current}/{total})", end='', flush=True)
 
+
+
+def perform_blast_with_os(query_fasta, subject_fasta, fasta_db, xml_output):
+    os.system(f"makeblastdb -in {subject_fasta} -dbtype nucl -out {fasta_db} > /dev/null 2>&1")
+    os.system(f"blastn -query {query_fasta} -db {fasta_db} -out {xml_output} -outfmt 6 -max_target_seqs 0") #For unlimited hits
+
+
+
+def process_row(index, row, blast_out, fasta_path, plasmid_fasta, out_ins_file, len_reads_items, original_stdout):
+    simple_loading_bar(index + 1, len_reads_items)
+    sys.stdout = open(os.devnull, 'w')
+    
+    query_id = row['Query ID'].split('_')[0]
+    q_st = int(row['Query ID'].split('_')[1])
+    q_end = int(row['Query ID'].split('_')[2])
+    subject_id = row['Subject ID']
+    
+    overlaps = analyze_blast_results(query_id, blast_out, q_st, q_end, fasta_path, plasmid_fasta)
+    
+    # Writing results to CSV
+    for overlap in overlaps:
+        result_df = pd.DataFrame({
+            "Read ID": [query_id],
+            "Subject ID": [subject_id],
+            "Query Start CSV": [q_st],
+            "Query End CSV": [q_end],
+            "Start Subject": [overlap["Start Subject"]],
+            "End Subject": [overlap["End Subject"]],
+            "Insertion Point": [overlap["Insertion Point"]],
+            "Repeat Length": [overlap["Repeat Length"]],
+            "Overlap Sequence": [overlap["Overlap Sequence"]]
+        })
+        save_to_csv(result_df, out_ins_file)
+    
+    sys.stdout = original_stdout
+
+# Function to handle multithreading
+def process_with_threads(df, blast_out, fasta_path, plasmid_fasta, out_ins_file, len_reads_items):
+    # Using ThreadPoolExecutor to process rows in parallel
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for index, row in df.iterrows():
+            futures.append(executor.submit(process_row, index, row, blast_out, fasta_path, plasmid_fasta, out_ins_file, len_reads_items, sys.stdout))
+        
+        # Wait for all threads to complete
+        for future in futures:
+            future.result()
 
 
 def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
@@ -200,6 +344,9 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
     #open_gap = 500
     #query_file = "01_pMAT1_plasmid.fasta"
 
+
+
+
     # Klasörleri gezip her klasördeki işlemleri gerçekleştiriyoruz
     for folder in os.listdir(current_dir):
         folder_path = os.path.join(current_dir, folder)
@@ -207,7 +354,7 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
 
         if os.path.isdir(folder_path):
             print(folder_path)
-            out_ins_file = os.path.join(ins_dir, f"{folder}_dr_insertions.csv")
+            out_ins_file = os.path.join(ins_dir, f"{folder}_dr_insertionsv2.csv")
 
 
             if os.path.exists(out_ins_file) and force_w:
@@ -228,14 +375,24 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
             
             best_alignment_csv = best_alignment_csv_files[0]  # Dosya varsa ilkini al
             fasta_file = f"{folder}.fasta"
-            
-            best_alignment_path = os.path.join(folder_path, best_alignment_csv)
-            print(best_alignment_path)
             fasta_path = os.path.join(folder_path, fasta_file)
+            temp_fasta = os.path.join(temp_dir, fasta_file)
+            #blast_out = os.path.join(temp_dir, 'blast_out')
+
+            copy_fasta(fasta_path, temp_fasta)
+
+            temp_fasta_db = os.path.splitext(temp_fasta)[0] + '_db'
+
+            batch_size = 100
+            
+            blast_out = process_blast_m(temp_fasta, plasmid_fasta, batch_size, temp_dir, temp_dir)
+            #blast_out = process_large_blast(plasmid_fasta, batch_size, temp_fasta, temp_fasta_db, temp_dir)
+            #perform_blast_with_os(plasmid_fasta, temp_fasta, temp_fasta_db, blast_out)
+
+            best_alignment_path = os.path.join(folder_path, best_alignment_csv)
             
             # CSV dosyasını oku
             df = pd.read_csv(best_alignment_path, sep='\t')
-            #print(df)
             
             len_reads_items = len(df)
             # Her bir Query ID için işlem yap
@@ -248,23 +405,15 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
                 q_end = int(row['Query ID'].split('_')[2])
                 subject_id = row['Subject ID']
 
-
-                # Query ID'ye karşılık gelen sekansı FASTA dosyasından çek
-                temp_fasta = os.path.join(temp_dir, f"{query_id}.fasta")
-                
-                with open(temp_fasta, "w") as temp_fasta_file:
-                    #print(fasta_path)
-                    SeqIO.write(extract_sequence(fasta_path, query_id), temp_fasta_file, "fasta")
-            
-                # Query için BLAST taraması yap
-                blast_output = os.path.join(temp_dir, f"{query_id}_blast.out")
-                #Ekim116-2024de comment yaptım gerekirse açarsın
-                blastn_cline = NcbiblastnCommandline(query=plasmid_fasta, subject=temp_fasta, outfmt=6, out=blast_output)
-                stdout, stderr = blastn_cline()
-                
-                # BLAST sonuçlarını analiz et ve overlap hesapla (threshold ile)
-                
-                overlaps = analyze_blast_results(blast_output, q_st, q_end, fasta_path, plasmid_fasta)
+                try:
+                    df = pd.read_csv(blast_out)
+                except pd.errors.EmptyDataError:
+                    print(f"{blast_out} boş ya da okunabilir veri yok.")
+                    df = None
+                    continue    
+    
+                blast_df_raw = pd.read_csv(blast_out, sep='\t', header=None)
+                overlaps = analyze_blast_results(query_id, blast_df_raw, q_st, q_end, fasta_path, plasmid_fasta)
                 
                 # Örnek sonuçları CSV'ye yazma
                 for overlap in overlaps:
@@ -283,3 +432,7 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
                 sys.stdout = original_stdout
             print('Control the file')
             
+
+
+
+main_dr_finder("data", "data/01_pMAT1_plasmid.fasta", 500)
