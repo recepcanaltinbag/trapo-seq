@@ -175,17 +175,17 @@ def perform_blast(query_fasta, db_fasta, db_name, xml_output, tab_output):
     #os.system(f"blastn -query {query_fasta} -db {db_name} -out {tab_output} -outfmt 6") uncommented, just for debugging :)
 
 # Function to handle each read_id’s processing, including perform_blast
-def process_read(read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, tab_data, genom_fasta, temp_dir, mapped_fasta):
+def process_read(read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, tab_data, genom_fasta, temp_dir, mapped_fasta, is_fasta, is_db, genom_db):
     sequence = extract_sequence(mapped_fasta, read_id, query_start, query_end)
     if sequence:
         #print('.', end='', flush=True)
         fasta_path = save_to_temp_fasta(sequence, temp_dir, read_id, query_start, query_end)
         genom_blast_xml = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_genom_blast.xml")
         genom_blast_tab = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_genom_blast.tab")
-        perform_blast(fasta_path, genom_fasta, "genom_db", genom_blast_xml, genom_blast_tab)
+        perform_blast(fasta_path, genom_fasta, genom_db, genom_blast_xml, genom_blast_tab)
         is_blast_xml = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_is_blast.xml")
         is_blast_tab = os.path.join(temp_dir, f"{read_id}_{query_start}_{query_end}_is_blast.tab")
-        perform_blast(fasta_path, is_fasta, "is_db", is_blast_xml, is_blast_tab)
+        perform_blast(fasta_path, is_fasta, is_db, is_blast_xml, is_blast_tab)
 
 
 def simple_loading_bar(current, total):
@@ -194,7 +194,7 @@ def simple_loading_bar(current, total):
     print(f"\rProcessing: [{bar}] {progress}% ({current}/{total})", end='', flush=True)
 
 
-def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold=70, max_workers = 2, debug=False, temp_value=False, partial_threshold = 80, partial_len = 8000):
+def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold=70, max_workers = 2, debug=False, temp_value=False, partial_threshold = 80, partial_len = 8000):
     print(f'Settings: Threshold: {threshold}, Threads: {max_workers}, Debugging: {debug}, Partial Threshold: {partial_threshold}, Partial Len: {partial_len}')
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
@@ -203,20 +203,23 @@ def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, th
     out_str_list = []
     len_of_tab = len(tab_data)
     print('Blast Process of ', len_of_tab)
-
+    genom_dir = os.path.dirname(genom_fasta)
+    genom_db = os.path.join(genom_dir, "genom_db")
+    is_dir = os.path.dirname(is_fasta)
+    is_db = os.path.join(is_dir, "is_db")
 
     # Veritabanının olup olmadığını kontrol et, yoksa oluştur
-    db_files = [f"genom_db.{ext}" for ext in ['nin', 'nhr', 'nsq']]
+    db_files = [f"{genom_db}.{ext}" for ext in ['nin', 'nhr', 'nsq']]
     if not all(os.path.isfile(file) for file in db_files):
-        os.system(f"makeblastdb -in {genom_fasta} -dbtype nucl -out genom_db")
-    db_files = [f"is_db.{ext}" for ext in ['nin', 'nhr', 'nsq']]
+        os.system(f"makeblastdb -in {genom_fasta} -dbtype nucl -out {genom_db}")
+    db_files = [f"{is_db}.{ext}" for ext in ['nin', 'nhr', 'nsq']]
     if not all(os.path.isfile(file) for file in db_files):
-        os.system(f"makeblastdb -in {is_fasta} -dbtype nucl -out is_db")
+        os.system(f"makeblastdb -in {is_fasta} -dbtype nucl -out {is_db}")
     
     #print_progress_bar(index, len_of_tab, prefix='Processing', length=40)
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(process_read, read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, tab_data, genom_fasta, temp_dir, mapped_fasta)
+            executor.submit(process_read, read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, tab_data, genom_fasta, temp_dir, mapped_fasta, is_fasta, is_db, genom_db)
             for read_id, query_start, query_end, q_len, ref_pos, qual, i_type, is_reverse, *_ in tab_data
         ]
 
@@ -247,7 +250,7 @@ def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, th
                 
         # Proces blast outputs
         genom_alignments = process_blast_results(genom_blast_xml, 'genome', None, partial_threshold, partial_len)
-        is_alignments = process_blast_results(is_blast_xml, 'is', is_fasta, partial_threshold, partial_len)
+        is_alignments = process_blast_results(is_blast_xml, 'is', is_db, partial_threshold, partial_len)
                 
         genom_dict = {alignment['Query ID']: alignment for alignment in genom_alignments} # dict for fast access
 
@@ -291,6 +294,7 @@ def main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, th
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
 # INPUTS
+'''
 tab_file = "filtered_read_insertions_minimap2_with_refs_v4.txt"
 mapped_fasta = "100ctab.fasta"
 genom_fasta = "BIOMIG1BAC.fasta"
@@ -304,6 +308,7 @@ partial_threshold = 80
 partial_len = 8000
 # OUTPUTS
 output_csv = "best_alignments.tab"
+'''
 #----------------------------------------------------
 
-main(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold, threads, debug, temp_value, partial_threshold, partial_len)
+#main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta, temp_dir, output_csv, threshold, threads, debug, temp_value, partial_threshold, partial_len)

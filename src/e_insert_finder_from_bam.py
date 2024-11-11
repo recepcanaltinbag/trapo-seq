@@ -234,7 +234,7 @@ def main_insert_finder_from_bam(bamfile, output_file, insertion_threshold = 500)
     #output_file = "filtered_read_insertions_minimap2_with_refs_v3.txt"
     #----------------------------------------------------
 
-    original_stdout = sys.stdout
+    original_stdout = sys.stdout #For debugging 
     
 
     read_info, read_len_dict = get_read_info(bamfile, insertion_threshold)
