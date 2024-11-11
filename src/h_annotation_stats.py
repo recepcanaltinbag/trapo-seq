@@ -3,9 +3,10 @@ import pandas as pd
 from Bio import SeqIO
 
 
-def main_stat(out_file):
+def main_is_stat(data_dir, out_file):
 
-    current_dir = os.getcwd()
+    #current_dir = os.getcwd()
+    current_dir = data_dir
     folders = [f for f in os.listdir(current_dir) if os.path.isdir(os.path.join(current_dir, f))]
     out_text_list = []
     out_text_segment = ""
@@ -13,12 +14,21 @@ def main_stat(out_file):
     for folder in folders:
 
         the_condition = f"{folder}"
-        fasta_file = os.path.join(current_dir, folder, f"{folder}.fasta")
-        tab_file = os.path.join(current_dir, folder, f"{folder}_best_alignments.tab")
-        
+        #fasta_file = os.path.join(current_dir, folder, f"{folder}.fasta")
+        tab_file = os.path.join(current_dir, folder, f"best_alignment.tab")
+
+        if not os.path.exists(tab_file):
+            print(f"Warning: '{tab_file}' not found. Skipping.")
+            continue
+
+
+
         print('Processing the files')
         print(os.path.basename(tab_file))
-        print(os.path.basename(fasta_file))
+        #print(os.path.basename(fasta_file))
+
+
+
 
         df_raw = pd.read_csv(tab_file, sep='\t')
         df = df_raw[df_raw['Note'] == 'IS_DB'].copy()
@@ -70,6 +80,6 @@ def main_stat(out_file):
     with open(out_file, "w") as f:
         f.write(out_text)
 
-out_file = 'stats.rcp'
-main_stat(out_file)
+#out_file = 'stats.rcp'
+#main_is_stat(out_file)
 

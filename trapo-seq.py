@@ -4,6 +4,7 @@ from src.b_filtering_based_on_len import filter_fastq_by_length
 from src.a_data_mapping import main_mapping
 from src.e_insert_finder_from_bam import main_insert_finder_from_bam
 from src.g_blast_insert_genome_db import main_annot
+from src.h_annotation_stats import main_is_stat
 
 
 trapo_seq_logo_v2 = """
@@ -66,6 +67,9 @@ def main():
     blast_annot_parser.add_argument("--partial_threshold", type=int, default=80, help="For big insertions, if it has lower coverage than this value (and partial_len is used with this value), eliminate. Value: 0-100, default:80")
     blast_annot_parser.add_argument("--partial_len", type=int, default=8000, help="For big insertions, if it is higher than this value, elimiation will be based on partial threshold, It is effective if there is multiple IS and TNs together. default:8000")
 
+    blast_is_stat_parser = subparsers.add_parser("is_stat", help="Stats of ISes and Tn's")
+    blast_is_stat_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
+    blast_is_stat_parser.add_argument("-o", "--output", type=str, required=True, help="path of output stat .rcp file")
 
     # Argümanları ayrıştırma
     args = parser.parse_args()
@@ -99,6 +103,11 @@ def main():
     elif args.command == "blast_annot":
         print(f"\nBlasting to annotate insertions..\n")
         main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
+
+    #H_IS_Stats
+    elif args.command == "is_stat":
+        print(f"\nStats of ISes..\n")
+        main_is_stat(args.input_dir, args.output)
 
 
     else:
