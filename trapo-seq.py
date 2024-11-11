@@ -2,6 +2,8 @@ import argparse
 from src.a_read_histograms import plot_histogram
 from src.b_filtering_based_on_len import filter_fastq_by_length
 from src.a_data_mapping import main_mapping
+from src.e_insert_finder_from_bam import main_insert_finder_from_bam
+
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -46,10 +48,10 @@ def main():
     filter_parser.add_argument("-g", "--genome", type=str, required=True, help="path of genome in fasta format")
     filter_parser.add_argument("-f", "--force", action="store_true", help="Force overwrite if the file exists")
 
-
-
-
-
+    filter_parser = subparsers.add_parser("insert_finder", help="finding inserts from .bam file")
+    filter_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
+    filter_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
+    filter_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
 
 
     # islem2 alt komutunu ekleme
@@ -79,9 +81,10 @@ def main():
         main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
         print('Mapping process was ended')
 
-
-
-
+    #E_INSERT_FINDER_FROM_BAM
+    elif args.command == "insert_finder":
+        print(f"\nMapping process\nInput BAM: {args.bam}, \nOutput: {args.output}, \nThreshold: {args.threshold}")
+        main_insert_finder_from_bam(args.bam, args.output, args.threshold)
 
 
 

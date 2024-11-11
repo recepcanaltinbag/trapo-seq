@@ -13,7 +13,8 @@
 
 import pysam
 from collections import defaultdict
-
+import sys
+import os
 
 #Average qualities of reads based on read_id, return a dict {read_id:quality}
 def calculate_average_quality(bamfile):
@@ -216,55 +217,75 @@ def find_nearest_reference(align_table, start, end):
     return nearest_reference
 
 
-#----------------------------------------------------
-# EXAMPLE USAGE -------------------------------------
-# INPUTS
-bamfile = "sorted.bam"
-insertion_threshold = 500
-# OUTPUTS
-output_file = "filtered_read_insertions_minimap2_with_refs_v3.txt"
-#----------------------------------------------------
+def simple_loading_bar(current, total):
+    progress = int((current / total) * 100)
+    bar = '=' * (progress // 2) + ' ' * (50 - (progress // 2))
+    print(f"\rProcessing: [{bar}] {progress}% ({current}/{total})", end='', flush=True)
 
-read_info, read_len_dict = get_read_info(bamfile, insertion_threshold)
-reads_insertions = defaultdict(list)
 
-for read_id, alignments in read_info.items():
-    zero_list = [0] * read_len_dict[read_id]
-    print(f"Read ID: {read_id}")
-    print(len(zero_list))
+def main_insert_finder_from_bam(bamfile, output_file, insertion_threshold = 500):
+
+    #----------------------------------------------------
+    # EXAMPLE USAGE -------------------------------------
+    # INPUTS
+    #bamfile = "sorted.bam"
+    #insertion_threshold = 500
+    # OUTPUTS
+    #output_file = "filtered_read_insertions_minimap2_with_refs_v3.txt"
+    #----------------------------------------------------
+
+    original_stdout = sys.stdout
     
-    align_table = []
 
-    for alignment in alignments:
-        zero_list[alignment['query_start']:alignment['query_end']] = [1] * (alignment['query_end'] - alignment['query_start'])
-        #print(zero_list)
-        print(f"  Reference Start: {alignment['reference_start']}")
-        print(f"  Reference End: {alignment['reference_end']}")
-        print(f"  Query Start: {alignment['query_start']}")
-        print(f"  Query End: {alignment['query_end']}")
-        print(f"  Aligned Length: {alignment['aligned_length']}")
-        print(f"  Aligned Reverse: {alignment['reverse']}")
-        align_table.append((alignment['reference_start'], alignment['reference_end'], alignment['query_start'], alignment['query_end'], alignment['reverse']))
-    
-    temp_ins = find_zero_sequences(zero_list, insertion_threshold, -1)
-    new_ins = []
-    if temp_ins != []:
+    read_info, read_len_dict = get_read_info(bamfile, insertion_threshold)
+    reads_insertions = defaultdict(list)
+
+    len_reads_items = read_info.items()
+
+    for i, (read_id, alignments) in enumerate(read_info.items()):
+
+        zero_list = [0] * read_len_dict[read_id]
+
+        simple_loading_bar(i + 1, len(len_reads_items)) 
+        sys.stdout = open(os.devnull, 'w')
         print(f"Read ID: {read_id}")
-        for each_temp_ins in temp_ins:
-            #print(f"Read ID: {read_id}", alignment['reverse'])
-            ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1])
-            new_ins.append((each_temp_ins[0],each_temp_ins[1]+1,each_temp_ins[2],ref,'SC', alignment['reverse'])) #+1 for 0-based
-        reads_insertions[read_id] = new_ins
-        print(reads_insertions[read_id], alignment['reverse'])
+        print(len(zero_list))
         
+        align_table = []
+
+        for alignment in alignments:
+            zero_list[alignment['query_start']:alignment['query_end']] = [1] * (alignment['query_end'] - alignment['query_start'])
+            #print(zero_list)
+            print(f"  Reference Start: {alignment['reference_start']}")
+            print(f"  Reference End: {alignment['reference_end']}")
+            print(f"  Query Start: {alignment['query_start']}")
+            print(f"  Query End: {alignment['query_end']}")
+            print(f"  Aligned Length: {alignment['aligned_length']}")
+            print(f"  Aligned Reverse: {alignment['reverse']}")
+            align_table.append((alignment['reference_start'], alignment['reference_end'], alignment['query_start'], alignment['query_end'], alignment['reverse']))
         
-        #if '037606da' in read_id:
-        #    input()
+        temp_ins = find_zero_sequences(zero_list, insertion_threshold, -1)
+        new_ins = []
+        if temp_ins != []:
+            print(f"Read ID: {read_id}")
+            for each_temp_ins in temp_ins:
+                #print(f"Read ID: {read_id}", alignment['reverse'])
+                ref = find_nearest_reference(align_table, each_temp_ins[0], each_temp_ins[1])
+                new_ins.append((each_temp_ins[0],each_temp_ins[1]+1,each_temp_ins[2],ref,'SC', alignment['reverse'])) #+1 for 0-based
+            reads_insertions[read_id] = new_ins
+            print(reads_insertions[read_id], alignment['reverse'])
+            
+            
+            #if '037606da' in read_id:
+            #    input()
+        sys.stdout = original_stdout
 
 
-#Extend if there are same read IDs there will be no problem
-for key, value in get_middle_inserts(bamfile, insertion_threshold).items():
-    reads_insertions[key].extend(value) 
+    #Extend if there are same read IDs there will be no problem
+    for key, value in get_middle_inserts(bamfile, insertion_threshold).items():
+        reads_insertions[key].extend(value) 
 
-#reads_insertions.update(get_middle_inserts(bamfile, insertion_threshold))
-filter_and_write_read_ids(reads_insertions, output_file, insertion_threshold, calculate_average_quality(bamfile))
+    #reads_insertions.update(get_middle_inserts(bamfile, insertion_threshold))
+    filter_and_write_read_ids(reads_insertions, output_file, insertion_threshold, calculate_average_quality(bamfile))
+
+    print('\nInserts are found and writed to the folder ', output_file)
