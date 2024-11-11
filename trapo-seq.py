@@ -27,13 +27,13 @@ ________Traposome Sequencing Pipeline_______
 def main():
     print("\033[93m" + trapo_seq_logo + "\033[0m")
 
-    # Ana parser oluşturma
+    # Main Parser
     parser = argparse.ArgumentParser(description="Traposome Sequencing Pipeline")
     parser.add_argument('--all-help', action='store_true', help="Show complete help message")
 
     subparsers = parser.add_subparsers(dest="command")
 
-    # islem1 alt komutunu ekleme
+    # Subcommands
     read_histogram_parser = subparsers.add_parser("read_histogram", help="creates histogram of reads based on lengths")
     read_histogram_parser.add_argument("-v", "--verbose", action="store_true", help="Extented output")
     read_histogram_parser.add_argument("-f", "--fastq", type=str, required=True, help="Path of fastq file")
@@ -73,7 +73,7 @@ def main():
     blast_is_stat_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
     blast_is_stat_parser.add_argument("-o", "--output", type=str, required=True, help="path of output stat .rcp file")
 
-    # Argümanları ayrıştırma
+    # Arguments
     args = parser.parse_args()
 
     #A_READ_HISTOGRAMS
@@ -81,7 +81,7 @@ def main():
         parser.print_help()
         print("\n" + "-"*40 + "\n")
         for subcommand_name, subcommand_parser in subparsers.choices.items():
-            print(f"\nSubcommand: {subcommand_name}")
+            print(f"\n\033[93mSubcommand: {subcommand_name}\033[0m")
             subcommand_parser.print_help()
             print("\n" + "-"*40 + "\n")
     else:
