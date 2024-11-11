@@ -1,3 +1,18 @@
+#-------------------------------------
+#This code used for mapping of reads to the plasmid and genome with using bash script in /scripts/01_data_prep_from_py.sh
+
+#INPUT: .fastq file
+#OUTPUT: bam, sam, txt mapping files
+
+#minimap2 is needed!
+
+#Recep Can Altınbağ, 11 11 2024, v0.1
+#-------------------------------------
+
+
+
+
+
 import subprocess
 import os
 

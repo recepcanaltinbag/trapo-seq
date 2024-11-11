@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#!/bin/bash
-
 # Function to count reads in a FastQ file
 count_reads_in_fastq() {
     local fastq_file=$1
@@ -31,7 +29,7 @@ summarize_mappings() {
     # Print summary
     echo "Plasmid: $(echo "$plasmid")"
     echo "Plasmid only: $(echo "$only_plasmid")"
-    echo "Genome only: $(echo "$both" )"
+    echo "Genome and Plasmid: $(echo "$both" )"
     the_rate=$(echo "scale=2; $both / ($both + $only_plasmid)" | bc)    
     echo "Transposition Rate: $the_rate"
     
@@ -244,9 +242,10 @@ for dir in */; do
         # Perform the actual operation (e.g., creating or processing the file)
     fi
 
-
+    echo ""
+    echo "Summarizing the mapping stats and saved to $OUTPUT_STAT"
     summarize_mappings "$SORTED_MAPPED_PL" "$ALIGNED_GN_ST" "$OUTPUT_STAT" "$FILTERED_FASTQ"
-
+    echo "----"
 
     cd ..
 done

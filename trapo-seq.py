@@ -75,7 +75,7 @@ def main():
     #
     #C_ALIGNMENT
     elif args.command == "map":
-        print(f"\nMapping process\n, Input Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
+        print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
         main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
         print('Mapping process was ended')
 
