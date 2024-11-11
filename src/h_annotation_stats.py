@@ -63,7 +63,7 @@ def main_is_stat(data_dir, out_file):
         for name, percentage in special_name_percentage_data.items():
             count = special_name_counts[name]  # Get the count for each special name
             print(f"{name}: {percentage:.2f}% ({count})")
-            out_text_segment = out_text_segment + f"{special_name_dict[name]}, {name}, {percentage:.2f}%, {count}\n"
+            out_text_segment = out_text_segment + f"{special_name_dict[name]}, {name}, {percentage:.2f}, {count}\n"
 
         # Output file
         out_text_list.append(out_text_segment)

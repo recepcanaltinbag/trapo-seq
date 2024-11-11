@@ -5,7 +5,7 @@ from src.a_data_mapping import main_mapping
 from src.e_insert_finder_from_bam import main_insert_finder_from_bam
 from src.g_blast_insert_genome_db import main_annot
 from src.h_annotation_stats import main_is_stat
-
+from src.i_heatmap import main_heatmap
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -73,6 +73,13 @@ def main():
     blast_is_stat_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
     blast_is_stat_parser.add_argument("-o", "--output", type=str, required=True, help="path of output stat .rcp file")
 
+    blast_heatmap_parser = subparsers.add_parser("heatmap", help="Creates a heatmap from *.rcp stats file")
+    blast_heatmap_parser.add_argument("-r", "--rcp_file", type=str, required=True, help="Path of *.rcp stats file")
+    blast_heatmap_parser.add_argument("-o", "--output", type=str, required=True, help="Output file")
+    blast_heatmap_parser.add_argument("-t", "--out_text", type=str, required=True, help="Output file")
+
+
+
     # Arguments
     args = parser.parse_args()
 
@@ -118,6 +125,11 @@ def main():
         elif args.command == "is_stat":
             print(f"\nStats of ISes..\n")
             main_is_stat(args.input_dir, args.output)
+
+        #I_Heatmap
+        elif args.command == "heatmap":
+            print(f"\nCreating Heatmap..\n")
+            main_heatmap(args.rcp_file, args.output, args.out_text)
 
 
         else:
