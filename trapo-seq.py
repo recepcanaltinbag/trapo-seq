@@ -83,8 +83,14 @@ def main():
     dr_logo_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
     dr_logo_parser.add_argument("-p", "--plasmid", type=str, required=True, help="Path of trap plasmid in fasta format")
     dr_logo_parser.add_argument("-o", "--out_dir", type=str, required=True, help="Output folder")
-    dr_logo_parser.add_argument("-g", "--gap_threshold", type=int, default=60, help="Gap, to extract more left and right flanking sequences from reads, deafult: 60")
+    dr_logo_parser.add_argument("-g", "--gap_threshold", type=int, default=60, help="Gap, to extract more left and right flanking sequences from reads, default: 60")
 
+    in_del_plot_parser = subparsers.add_parser("in_del_plot", help="Plotting indels and dels to analyze possible excisions and similar trends")
+    in_del_plot_parser.add_argument("-i", "--ins_bam", type=str, required=True, help="Path of insertions from bam tabular file")
+    in_del_plot_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
+    in_del_plot_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
+    in_del_plot_parser.add_argument("--in_threshold", type=int, default=2, help="Disregard lower insertion than this, defult: 2")
+    in_del_plot_parser.add_argument("--del_threshold", type=int, default=5, help="Disregard lower deletions than this, defult: 5")
 
     # Arguments
     args = parser.parse_args()
@@ -156,6 +162,10 @@ def main():
             print(f"\nFinding DR Logos..\n")
             main_dr_logo(args.plasmid, args.input_dir, args.out_dir, args.gap_threshold)
 
+        elif args.command == "in_del_plot":
+            from src.f_in_del_plot import main_in_del_plot
+            print("\nPlotting indels...\n")
+            main_in_del_plot(args.ins_bam, args.bam, args.output, args.in_threshold, args.del_threshold)
 
         else:
             print("Please enter a command.")

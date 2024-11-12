@@ -11,6 +11,7 @@
 import matplotlib.pyplot as plt
 from collections import defaultdict
 import pysam
+import os
 
 def parse_insertion_tab_file(file_path):
     idct = defaultdict(list)
@@ -83,6 +84,7 @@ def extract_insertions_from_bam(bam_file_path, insertion_threshold):
 
 #Plotting
 def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, output):
+    print(f"{output}_{name} is processing")
     sorted_insertion_positions = sorted(insertion_counts.keys())
     sorted_insertion_counts = [insertion_counts[pos] for pos in sorted_insertion_positions]
 
@@ -107,34 +109,39 @@ def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, outp
     
     plt.title('Insertions and Deletions')
     plt.savefig(f"{output}_{name}.pdf")
-    plt.show()
+    print(f"{output}_{name}.pdf saved")
+    #plt.show()
 
 
 
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
 # INPUTS
-tab_file_path = 'filtered_read_insertions_minimap2_with_refs.txt'
-bam_file_path = 'sorted.bam'
+'''
+tab_file_path = 'data/5bac/insertions_from_bam.tab'
+bam_file_path = 'data/5bac/03_sorted_mapped_to_plasmid.bam'
+output_name = "in_del_plot"
 deletion_threshold = 5
 insertion_threshold = 2
-
-# OUTPUTS
-output = "insertion_deletion_line_plot"
-#----------------------------------------------------
+'''
 
 
+def main_in_del_plot(tab_file_path, bam_file_path, output_name, insertion_threshold=2, deletion_threshold=5):
 
-# Insertions
-insertion_counts, weighted_insertion_counts = parse_insertion_tab_file(tab_file_path) #SC types are taken from tabular file
-insertion_counts_in, weighted_insertion_counts_in = extract_insertions_from_bam(bam_file_path, insertion_threshold) #IN types are taken from bam file
+    dir_path = os.path.dirname(os.path.abspath(bam_file_path))
+    output = os.path.join(dir_path, output_name)
 
-insertion_counts.update(insertion_counts_in)
-weighted_insertion_counts.update(weighted_insertion_counts_in) #Combine bam file inputs and tabular file inputs
 
-# Deletions
-deletion_counts, weighted_deletion_counts = extract_deletions_from_bam(bam_file_path, deletion_threshold)
+    # Insertions
+    insertion_counts, weighted_insertion_counts = parse_insertion_tab_file(tab_file_path) #SC types are taken from tabular file
+    insertion_counts_in, weighted_insertion_counts_in = extract_insertions_from_bam(bam_file_path, insertion_threshold) #IN types are taken from bam file
 
-# Plotting
-plot_insertion_deletion_graphs(insertion_counts, deletion_counts, 'non-weighted', output)
-plot_insertion_deletion_graphs(weighted_insertion_counts, weighted_deletion_counts, 'weighted', output)
+    insertion_counts.update(insertion_counts_in)
+    weighted_insertion_counts.update(weighted_insertion_counts_in) #Combine bam file inputs and tabular file inputs
+
+    # Deletions
+    deletion_counts, weighted_deletion_counts = extract_deletions_from_bam(bam_file_path, deletion_threshold)
+
+    # Plotting
+    plot_insertion_deletion_graphs(insertion_counts, deletion_counts, 'non-weighted', output)
+    plot_insertion_deletion_graphs(weighted_insertion_counts, weighted_deletion_counts, 'weighted', output)
