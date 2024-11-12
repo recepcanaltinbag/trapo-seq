@@ -92,6 +92,17 @@ def main():
     in_del_plot_parser.add_argument("--in_threshold", type=int, default=2, help="Disregard lower insertion than this, defult: 2")
     in_del_plot_parser.add_argument("--del_threshold", type=int, default=5, help="Disregard lower deletions than this, defult: 5")
 
+    kde_mobile_parser = subparsers.add_parser("kde_mobile", help="Plotting kdes, to anaylze jumping DNA sizes")
+    kde_mobile_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
+    kde_mobile_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
+
+
+    map_dist_parser = subparsers.add_parser("map_dist", help="Plotting dist, to anaylze jumping DNA coordinates both genome and plasmid")
+    map_dist_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
+    map_dist_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
+
+
+
     # Arguments
     args = parser.parse_args()
 
@@ -166,6 +177,17 @@ def main():
             from src.f_in_del_plot import main_in_del_plot
             print("\nPlotting indels...\n")
             main_in_del_plot(args.ins_bam, args.bam, args.output, args.in_threshold, args.del_threshold)
+
+        elif args.command == "kde_mobile":
+            from src.d_kde_mobile import main_kde_mobile
+            print("\nPlotting kdes of mobile bpairs of genome...\n")
+            main_kde_mobile(args.bam, args.output)
+
+        elif args.command == "map_dist":
+            from src.c_map_dist import main_map_dist
+            print("\nPlotting plasmid and genome read distributions...\n")
+            main_map_dist(args.bam, args.output)
+
 
         else:
             print("Please enter a command.")

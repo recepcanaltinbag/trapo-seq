@@ -51,8 +51,9 @@ def read_alignment(bam_file):
     alignment = pysam.AlignmentFile(bam_file, "rb")
     reads = defaultdict(list)
     for read in alignment.fetch():
-        if not read.is_unmapped:
+        if not read.is_unmapped and read.query_length != 0:
             reads[read.query_name].append((read.reference_start, read.reference_end))
+            
     alignment.close()
     return reads
 
@@ -89,7 +90,7 @@ def plot_read_distribution(plasmid_reads, genome_reads, plasmid_length, genome_l
     plt.tight_layout()
     plt.savefig(f"{output}.pdf")
     print(f'Figure saved as {output}')
-    plt.show()
+    #plt.show()
 
 
 #Get reference lengths from bam file
@@ -126,29 +127,55 @@ def summarize_mappings(plasmid_reads, genome_reads, output_txt, fastq_file):
     print(f"Mapping statistics written to {output_txt}")
 
 
+
+def find_file_with_prefix(directory, prefix, enfix):
+    """
+    Searches for a file that starts with the specified prefix in the given directory.
+    
+    Parameters:
+    directory (str): Path to the directory to search in.
+    prefix (str): The prefix to search for (default is "07").
+    
+    Returns:
+    str: Full path of the first file found with the specified prefix, or None if not found.
+    """
+    # Iterate through files in the directory
+    for filename in os.listdir(directory):
+        # Check if the file starts with the specified prefix
+        if filename.startswith(prefix) and filename.endswith(enfix):
+            # Return the full path of the matching file
+            return os.path.join(directory, filename)
+    # If no file is found, return None
+    return None
+
+
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
 # INPUTS
-plasmid_bam = "sorted_mapped_to_plasmid.bam"
-genome_bam = "sorted_aligned_to_other_genome.bam"
-fastq_file = "5bac_4000filtered.fastq"
+#plasmid_bam = "data/5bac/03_sorted_mapped_to_plasmid.bam"
 
 # OUTPUTS
-output = "reads_mapped_to_plasmid_and_genome"
-output_txt = "mapping_statistics.txt"
+#output_p = "read_dist_plasmid_and_genome"
 #----------------------------------------------------
 
-plasmid_length = get_reference_lengths(plasmid_bam)[0]  
-genome_length = get_reference_lengths(genome_bam)[0]
+def main_map_dist(plasmid_bam, output_p):
 
-print('\n\nDistribution of reads\n')
-print(f'Len of plasmid: {plasmid_length}')
-print(f'Len of genome: {genome_length}\n----')
+    dir_path = os.path.dirname(os.path.abspath(plasmid_bam))
+    output = os.path.join(dir_path, output_p)
 
-plasmid_reads = read_alignment(plasmid_bam)
-genome_reads = read_alignment(genome_bam)
+    genome_bam = find_file_with_prefix(dir_path, "07_", ".bam")
+    print('Corresponding genome bam: ', genome_bam)
 
-summarize_mappings(plasmid_reads, genome_reads, output_txt, fastq_file)
-plot_read_distribution(plasmid_reads, genome_reads, plasmid_length, genome_length, output)
+    plasmid_length = get_reference_lengths(plasmid_bam)[0]  
+    genome_length = get_reference_lengths(genome_bam)[0]
+
+    print('\n\nDistribution of reads\n')
+    print(f'Len of plasmid: {plasmid_length}')
+    print(f'Len of genome: {genome_length}\n----')
+
+    plasmid_reads = read_alignment(plasmid_bam)
+    genome_reads = read_alignment(genome_bam)
+
+    plot_read_distribution(plasmid_reads, genome_reads, plasmid_length, genome_length, output)
 
 
