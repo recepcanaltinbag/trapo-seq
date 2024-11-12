@@ -12,18 +12,18 @@
   - [Alignment](#alignment)
   - [Insertion Finder](#insertion-finder)
     - [Manually curated Transposons](#manually-curated-transposons)
-    - [Stats of Transposons](#stats-of-transposons)
-    - [Heatmap of Transposons](#heatmap-of-transposons)
   - [Annotation of Insertions](#annotation-of-insertions)
     - [Examining the novel inserts](#examining-the-novel-inserts)
+    - [Stats of Transposons](#stats-of-transposons)
+    - [Heatmap of Transposons](#heatmap-of-transposons)
     - [Insertion Coordinates](#insertion-coordinates)
     - [DR Finder](#dr-finder)
     - [DR Sequence Logos](#dr-sequence-logos)
     - [Kde Plots](#kde-plots)
+  - [Possible Excisions](#possible-excisions)
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
-  - [Possible Excisions](#possible-excisions) 
 - [FAQ](#faq)
-  - [How Can I Cite trapo-seq](#how-can-i-cite)
+  - [How Can I Cite trapo-seq?](#how-can-i-cite-trapo-seq?)
 - [License](#license)
 
 
@@ -43,19 +43,19 @@ First, assesing the quality of plasmid DNA library and the sequencing output is 
 
 ### Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [NanoPlot](https://github.com/wdecoster/NanoPlot) or If you want to visualize without using NanoPlot you can use the [Python script](/extra/00_read_histograms.py) under extra folder.
+- **read_histogram** module is enough to handle, but there are other tools you can also use such as [NanoPlot](https://github.com/wdecoster/NanoPlot)
 
 ```
-NanoPlot --fastq <fastq_file> -o <output_folder>
+python trapo-seq.py read_histogram -f data/barcode01/data.fastq -o data/barcode01/read_len_hist
 ```
 
 If plasmids are extracted with sufficient purity, most of the reads are expected to be close to the length of the plasmid. The desired scenario is that there are mobile element insertions into the plasmids so the majority of reads are longer than the original plasmid. If there are shorter reads than, this may be due to: fragmentations while doing library preparation, the enzyme cuts more than one restriction site or the inserted mobile genetic elements have restriction site. For extra information please visit the [docs page](/docs#readme). So, it is crucial to pick restriction enzyme that does not cut mobile genetic elements and has only one restriction site on the plasmid. If the majority of the reads are not longer than the the original length of the plasmid, this may be explained by scenarios such as mutations on selective genes in plasmid or the mobile element excisions.
 
 As an example output (Figure 1):
 
-There are fragmented reads around 1kb, but most of reads are longer than 5kb. Also, the original size of this trap plasmid is 7kb, but there are reads more than 7 kb such as around 8-10 kb. So, it can be said that there are two main insertions of different lengths, and this data is good for next steps.
+The original size of this trap plasmid is 7kb, but there are reads more than 7 kb such as around 8. So, it can be said that there are some insertions but the most of the plasmid data do not have insertions.
 
-![example_output](/images/1_LengthHistogramv2.png)
+![example_output](/images/read_len-1.png)
 
 Figure 1: Non weighted histogram graph of plasmid reads.
 
@@ -65,12 +65,15 @@ To eliminate the shorter reads, it is essential to filter. We want long reads to
 
 ### Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- [FiltLong](https://github.com/rrwick/Filtlong) or If you want to filter only length-based (you do not need FiltLong) you can use the [Python script](/extra/01_filtering_based_on_len.py) under extra folder.
+- If you want to filter only length-based (you do not need FiltLong) you can use **read_histogram** module, for more advanced filtering options you can use other programs like [FiltLong](https://github.com/rrwick/Filtlong):
 
 ```
-filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
-
+python trapo-seq.py read_histogram -f data/barcode01/data.fastq -o data/barcode01/read_len_hist -l 2000
 ```
+- **-f** fastq file path
+- **-o** output file path
+- **-l** filtering threshold 
+
 
 ## Alignment
 
@@ -79,17 +82,48 @@ filtlong --min_length 1000 merged.fastq | gzip > filtered_1kb.fastq
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
 
-In the directory where the demultiplexed barcode folders are located, you can use [the data prep script](/scripts/01_data_prep.sh). In this script, the reads in the different folders are mapped on your plasmid and also the genome you used. Using the both plasmid and genome is significant, because if both of them have alignments in a read that means there is a jumping gene from genome to the plasmid (If the plasmid and genome do not have homologous portions, and if the read are not chimeric). Therefore, transposition ratio can be calculated.
+You need to have minimap2 and samtools in the your path. So, try these commands in the terminal before going further:
+```
+minimap2 --version
+samtools --version
+```
+
+If there is no error, you can continue. Please, be careful about folder structure and naming. (Suggested naming: barcode01/barcode01.fastq) or you can use the conditions names which barcodes corressponding, try to be simple. **Folder names and fastq names must be matched**!
+```
+|-- data
+  |-- barcode_01
+    |-- barcode_01.fastq
+  |-- barcode_02
+    |-- barcode_02.fastq
+```
+
+
+```
+python trapo-seq.py map -d data -p data/trap_plasmid.fasta -g data/genome.fasta --force
+
+```
+- **-d** directory which barcode folders having fastq files 
+- **-p** plasmid sequence data path (*.fasta)
+- **-g** genome sequence data path (*.fasta)
+- **--force** to overwrite results and temp files
+
+In this script, the reads in the different folders are mapped on your plasmid and also the genome you used. Using the both plasmid and genome is significant, because if both of them have alignments in a read that means there is a jumping gene from genome to the plasmid (If the plasmid and genome do not have homologous portions, and if the read are not chimeric). Therefore, transposition ratio can be calculated.
 
 If genomic DNA contamination is to be examined, a careful approach should be taken because transposed plasmids carry portions of genomic DNA. If a read do not have any plasmid portion, it can be labeled as a DNA contamination.
 
 During barcoding, different barcodes can get mixed up with other barcodes or that incorrect classification occurs after demultiplexing. This is also important to take into account before moving further especially if barcodes are from different strains or different plasmids.
 
-You can also look the docs section [to understand sam file and CIGAR strings](/docs#understanding-cigar-string). If you want to analyse your data with different tools than minimap2, the insertion finding algorithm can need some adjustments. I tested it with [bwa-mem](https://github.com/lh3/bwa), and it is working fine but I do not know others.
+You can also look the docs section [for taking extra info about sam file and CIGAR strings](/docs#understanding-cigar-string). If you want to analyse your data with different tools than minimap2, the insertion finding algorithm can need some adjustments. I tested it with [bwa-mem](https://github.com/lh3/bwa), and it is working fine but I do not know others.
 
 
 ## Insertion Finder
 
+This module will find insertions using bam files created by mapping module. Just give the data folder as input and it will hopefully detect and analyze bam files.
+
+```
+python trapo-seq.py insert_finder_batch -d data
+```
+- **-d** directory which barcode folders having bam files
 
 Output of this step creates a tabular file in the format of:
 
@@ -97,35 +131,77 @@ Output of this step creates a tabular file in the format of:
 |---------|-------------|-----------|------------------|---------|---------|-------------|------------|
 | read_1  |      100   |    1200       |    1180       | 4093      |   98  |  [IN, SC]   |   True     |
 
-
-Folder structure and expected naming:
-```
-|-- folder_name
-  |-- folder_name.fasta
-  |-- folder_name_best_alignments.fasta
-```
+You can also look the docs section [to understand two different insert_types: IN, SC](/docs#extra-case-soft-clips)
 
 
 ### Manually curated Transposons
+
+If you do not have any data about tranposons in your genome, you can still continue to this pipeline with an empty manually curated transposon file in the format of:
+
+```
+IS_curated.fasta:
+
+>NO_TRANSPOSONDATA
+ATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAAD
+```
+However, I recommend scanning the genome using tools like [ISFinder](https://www-is.biotoul.fr/index.php) or [ISescan](https://github.com/xiezhq/ISEScan) to identify unique transposons, and then proceeding with further analysis. And creating a file like this: Sequence IDs must be in the format **(>ISfamily_ISName)** such as (IS5_ISPs1). 
+
+```
+IS_curated.fasta:
+
+>IS5_ISPs1
+ATGGCTGATGACAAD.....
+>IS3_ISPs5
+GCTGATGACAAD.....
+```
+
+Then, it is ready for next module.
+
+
+## Annotation of Insertions
+
+
+In this step, the extracted insertions will be searched in the genome and manually curated IS FASTA files, labeled accordingly, and the results will be presented in a tabular format. If there is a dummy manually curated IS file, the outputs of this module can be used to label transposons or insertion sequences. 
+
+```
+python trapo-seq.py blast_annot_batch -d data -g data/genome.fasta --is_fasta data/IS_curated.fasta --threads 12 --no_temp
+```
+- **-d** directory which barcode folders having tab file (insertion_from_bam)
+- **-g** genome sequence data path (*.fasta)
+- **--is_fasta** manually curated and labeled ISes (*.fasta) Sequence IDs must be in the format (>ISfamily_ISName) such as (IS5_ISPs1). Please have a look [Manually curated Transposons](#manually-curated-transposons)
+```
+IS_curated.fasta:
+
+>IS5_ISPs1
+ATGGCTGATGACAAD.....
+>IS3_ISPs5
+GCTGATGACAAD.....
+```
+- **--threads** how many threads can be possible (default 2)
+- **--no_temp** do not delete temp files, can be helpful for debugging 
+
+The output of this module is a tabular file (*best_alignment.tab) in the format of:
+
+| Query ID | Subject ID | Identity (%) | Score | E-value | Query Start | Query End | Subject Start | Subject End | Note | Explained | ref_pos | is_Reverse |
+|----------|------------|--------------|-------|---------|-------------|-----------|---------------|-------------|------|-----------|---------|------------|
+|   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  IS_DB  |  98     |   4000   |    True     |
+|   read_2    |   genome_id      |    99   |   900   |   0   |     13     |   2100    |    15    |   2500   |  Genome  |  99     |   4250   |    False     |
+|   read_3    |   no_blast_hit      |    N/A   |   N/A   |   N/A   |     0     |   0    |    0    |   0   | Contamination  |  0     |   5165   |    True     |
+</br>
+
+
+The most significant values in the table are **Explained**, **Note**, and **ref_pos**. The **"Explained"** value indicates how well the insertion can be aligned, demonstrating its relevance and matching with the manually curated database (**IS_DB**) or (**Genome**). If it aligns with a part of the **genome** rather than the database (IS_DB), it could potentially represent **a novel insertion**. The **"ref_pos"** value refers to the insertion point on the plasmid, marking the exact location where the insertion occurs.
+
+
+
+### Examining the novel inserts
+
 
 
 ### Stats of Transposons
 
 
 ### Heatmap of Transposons
-
-
-
-## Annotation of Insertions
-
-
-| Query ID | Subject ID | Identity (%) | Score | E-value | Query Start | Query End | Subject Start | Subject End | Note | Explained | ref_pos | is_Reverse |
-|----------|------------|--------------|-------|---------|-------------|-----------|---------------|-------------|------|-----------|---------|------------|
-|   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  IS_DB  |  98     |   4000   |    True     |
-
-
-### Examining the novel inserts
-
 
 
 ### Insertion Coordinates
@@ -142,19 +218,23 @@ Folder structure and expected naming:
 
 
 
-## Mutation and Variant Analysis 
-
-m
-
 
 ## Possible Excisions
 
 
 
 
+## Mutation and Variant Analysis 
 
 
 
+# FAQ
+
+## How Can I Cite trapo-seq?
+
+
+
+## Licence
 
 
 
