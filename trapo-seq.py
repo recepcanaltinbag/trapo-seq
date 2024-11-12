@@ -206,16 +206,17 @@ def main():
             print(f"\nFinding DR Logos..\n")
             main_dr_logo(args.plasmid, args.input_dir, args.out_dir, args.gap_threshold)
 
+        #F_INDEL_PLOTS
         elif args.command == "in_del_plot":
             from src.f_in_del_plot import main_in_del_plot
             print("\nPlotting indels...\n")
             main_in_del_plot(args.ins_bam, args.bam, args.output, args.in_threshold, args.del_threshold)
-
+        #D_KDE
         elif args.command == "kde_mobile":
             from src.d_kde_mobile import main_kde_mobile
             print("\nPlotting kdes of mobile bpairs of genome...\n")
             main_kde_mobile(args.bam, args.output)
-
+        #C_MAP_DIST
         elif args.command == "map_dist":
             from src.c_map_dist import main_map_dist
             print("\nPlotting plasmid and genome read distributions...\n")
