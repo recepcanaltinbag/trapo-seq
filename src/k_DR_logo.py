@@ -25,6 +25,21 @@ import statistics
 from collections import Counter
 
 
+def get_sequence_length(fasta_file):
+    """
+    Reads a single-sequence FASTA file and returns the sequence length.
+    
+    Parameters:
+    fasta_file (str): Path to the FASTA file.
+    
+    Returns:
+    int: The length of the sequence.
+    """
+    # Parse the FASTA file and get the first (and only) sequence
+    record = next(SeqIO.parse(fasta_file, "fasta"))
+    return len(record.seq)
+
+
 # Sometimes the naming can be problematic for file cration, so it is good to clean these type of characters
 def clean_filename(name):
     return name.replace('::', '_').replace('/', '_').replace('\\', '_')
@@ -48,7 +63,7 @@ def run_mafft_silently(input_file, output_file):
         return None
 
 # Creating temp files and alignment
-def align_sequences_temp(sequences):
+def align_sequences_temp(sequences, gap_threshold):
     if len(sequences) < 2:
         print('one sequence, warning')
         return []
@@ -69,11 +84,11 @@ def align_sequences_temp(sequences):
         
         alignment = AlignIO.read(temp_output.name, "fasta")
     
-    alignment = remove_high_gap_columns(alignment)
+    alignment = remove_high_gap_columns(alignment, gap_threshold)
     print(alignment)
     return alignment
 
-def remove_high_gap_columns(alignment, gap_threshold=60):
+def remove_high_gap_columns(alignment, gap_threshold):
     """
     :param alignment: seqs in list
     :param gap_threshold: Maximum acceptible gap threshold default 60
@@ -136,55 +151,60 @@ def create_sequence_logo(alignment, best_length, output_file, safe_name):
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
 # INPUTS
-plasmid_len = 7023
-input_folder = 'insertions'
+'''
+plasmid_fasta = 'data/01_pMAT1_plasmid.fasta'
+input_folder = 'data/insertions'
 # OUTPUTS
-output_folder = 'z_hists_logos'
+output_folder = 'data/dr_logos'
+gap_threshold = 60
+'''
 #----------------------------------------------------
 
 
-os.makedirs(output_folder, exist_ok=True)
+def main_dr_logo(plasmid_fasta, input_folder, output_folder, gap_threshold=60):
+    plasmid_len = get_sequence_length(plasmid_fasta)
+    os.makedirs(output_folder, exist_ok=True)
 
-# All _insertions.csv files will be taken into account
-all_files = [f for f in os.listdir(input_folder) if f.endswith('_insertions.csv')]
+    # All _insertions.csv files will be taken into account
+    all_files = [f for f in os.listdir(input_folder) if f.endswith('_insertions.csv')]
 
-df_list = []
-for f in all_files:
-    if f.endswith('.csv') and not f.startswith('.'):  # CSV dosyası ve gizli dosya olmamalı
-        file_path = os.path.join(input_folder, f)
-        try:
-            df_list.append(pd.read_csv(file_path))
-        except Exception as e:
-            print(f"Error reading {f}: {e}")
+    df_list = []
+    for f in all_files:
+        if f.endswith('.csv') and not f.startswith('.'):  # CSV dosyası ve gizli dosya olmamalı
+            file_path = os.path.join(input_folder, f)
+            try:
+                df_list.append(pd.read_csv(file_path))
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
 
-# All data frames will be combined
-all_data = pd.concat(df_list, ignore_index=True)
-grouped = all_data.groupby('Subject ID')
+    # All data frames will be combined
+    all_data = pd.concat(df_list, ignore_index=True)
+    grouped = all_data.groupby('Subject ID')
 
-for name, group in grouped:
-    safe_name = clean_filename(name)
-    
-    insertion_points = group['Insertion Point'].tolist()
-    overlap_sequences = group.loc[group['Repeat Length'] > 0, 'Overlap Sequence'].tolist()
+    for name, group in grouped:
+        safe_name = clean_filename(name)
+        
+        insertion_points = group['Insertion Point'].tolist()
+        overlap_sequences = group.loc[group['Repeat Length'] > 0, 'Overlap Sequence'].tolist()
 
 
-    # Histogram
-    plt.figure(figsize=(10, 6))
-    plt.hist(insertion_points, bins=60, histtype='stepfilled', edgecolor='orange', linewidth=1.5, color='white')
+        # Histogram
+        plt.figure(figsize=(10, 6))
+        plt.hist(insertion_points, bins=60, histtype='stepfilled', edgecolor='orange', linewidth=1.5, color='white')
 
-    plt.xlim(0, plasmid_len)  # X ekseni maksimum değeri
-    plt.title(f'Insertion Points Histogram for {safe_name}')
-    plt.xlabel('Insertion Point')
-    plt.ylabel('Frequency')
+        plt.xlim(0, plasmid_len)  # X ekseni maksimum değeri
+        plt.title(f'Insertion Points Histogram for {safe_name}')
+        plt.xlabel('Insertion Point')
+        plt.ylabel('Frequency')
 
-    # Saving histograms
-    plt.savefig(os.path.join(output_folder, f'{safe_name}_insertion_points_histogram.pdf'))
-    plt.close()
+        # Saving histograms
+        plt.savefig(os.path.join(output_folder, f'{safe_name}_insertion_points_histogram.pdf'))
+        plt.close()
 
-    alignment = align_sequences_temp(overlap_sequences)  # 2. MAFFT ile hizalama
-    if len(alignment) < 2:
-        print(f'len of alignment {alignment} is not enough! skipping {safe_name}')
-    else:
-        best_length = get_best_alignment_length(alignment)  # 3. En iyi uzunluk
-        create_sequence_logo(alignment, best_length, os.path.join(output_folder, f'{safe_name}_overlap_sequence_logo.pdf'),safe_name)  # 4. Sekans logosu ve kaydetme
+        alignment = align_sequences_temp(overlap_sequences, gap_threshold)  # 2. MAFFT ile hizalama
+        if len(alignment) < 2:
+            print(f'len of alignment {alignment} is not enough! skipping {safe_name}')
+        else:
+            best_length = get_best_alignment_length(alignment)  # 3. En iyi uzunluk
+            create_sequence_logo(alignment, best_length, os.path.join(output_folder, f'{safe_name}_overlap_sequence_logo.pdf'),safe_name)  # 4. Sekans logosu ve kaydetme
 

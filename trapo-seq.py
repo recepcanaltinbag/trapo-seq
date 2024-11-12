@@ -79,13 +79,15 @@ def main():
     dr_finder_parser.add_argument("-t", "--threshold", type=int, default=200, help="Threshold to eliminate insertion start and end coordinates in plasmid, default 200")
     dr_finder_parser.add_argument("-r", "--repeat_threshold", type=int, default=30, help="Max len of repeats, deafult: 30")
 
+    dr_logo_parser = subparsers.add_parser("dr_logo", help="Finding DR Logos")
+    dr_logo_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
+    dr_logo_parser.add_argument("-p", "--plasmid", type=str, required=True, help="Path of trap plasmid in fasta format")
+    dr_logo_parser.add_argument("-o", "--out_dir", type=str, required=True, help="Output folder")
+    dr_logo_parser.add_argument("-g", "--gap_threshold", type=int, default=60, help="Gap, to extract more left and right flanking sequences from reads, deafult: 60")
+
 
     # Arguments
     args = parser.parse_args()
-
-
-
-
 
     #A_READ_HISTOGRAMS
     if args.all_help:
@@ -147,6 +149,13 @@ def main():
             from src.j_dr_finder_multithread import main_dr_finder
             print(f"\nFinding DRs..\n")
             main_dr_finder(args.input_dir, args.plasmid, args.gap, args.threshold, args.repeat_threshold)
+
+        #K_DR_Logo
+        elif args.command == "dr_logo":
+            from src.k_DR_logo import main_dr_logo
+            print(f"\nFinding DR Logos..\n")
+            main_dr_logo(args.plasmid, args.input_dir, args.out_dir, args.gap_threshold)
+
 
         else:
             print("Please enter a command.")

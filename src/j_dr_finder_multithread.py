@@ -304,7 +304,7 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, threshold, repeat_th, f
 
         if os.path.isdir(folder_path):
             print(folder_path)
-            out_ins_file = os.path.join(ins_dir, f"{folder}_dr_insertionsv2.csv")
+            out_ins_file = os.path.join(ins_dir, f"{folder}_insertions.csv")
             results_txt_list = []
 
             if os.path.exists(out_ins_file) and force_w:
