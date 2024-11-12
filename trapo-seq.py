@@ -49,6 +49,11 @@ def main():
     insert_finder_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     insert_finder_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
 
+    insert_finder_batch_parser = subparsers.add_parser("insert_finder_batch", help="finding inserts from .bam file")
+    insert_finder_batch_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Folder of folders including bam files")
+    insert_finder_batch_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
+
+
     blast_annot_parser = subparsers.add_parser("blast_annot", help="Annotation with Blast")
     blast_annot_parser.add_argument("-i", "--ins_bam", type=str, required=True, help="Path of insertions from bam tabular file")
     blast_annot_parser.add_argument("-m", "--mapped_fasta", type=str, required=True, help="path of mapped reads in fasta format")
@@ -141,6 +146,13 @@ def main():
             from src.e_insert_finder_from_bam import main_insert_finder_from_bam
             print(f"\nMapping process\nInput BAM: {args.bam}, \nOutput: {args.output}, \nThreshold: {args.threshold}")
             main_insert_finder_from_bam(args.bam, args.output, args.threshold)
+
+        #BATCH VERSION
+        elif args.command == "insert_finder_batch":
+            from src.e_insert_finder_from_bam_batch import main_insert_finder_from_bam_batch
+            print(f"\nMapping process\nInput BAM: {args.input_dir}, \nThreshold: {args.threshold}")
+            main_insert_finder_from_bam_batch(args.input_dir, args.threshold)
+
 
 
         #G_BLAST_THE_INSERTS_
