@@ -183,7 +183,7 @@ def main_dr_logo(plasmid_fasta, input_folder, output_folder, gap_threshold=60):
 
     for name, group in grouped:
         safe_name = clean_filename(name)
-        
+        print("Processing: ", safe_name)
         insertion_points = group['Insertion Point'].tolist()
         overlap_sequences = group.loc[group['Repeat Length'] > 0, 'Overlap Sequence'].tolist()
 

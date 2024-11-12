@@ -152,7 +152,7 @@ def main():
 
         #K_DR_Logo
         elif args.command == "dr_logo":
-            from src.k_DR_logo import main_dr_logo
+            from src.k_dr_logo import main_dr_logo
             print(f"\nFinding DR Logos..\n")
             main_dr_logo(args.plasmid, args.input_dir, args.out_dir, args.gap_threshold)
 
