@@ -49,7 +49,7 @@ def main():
     insert_finder_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     insert_finder_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
 
-    insert_finder_batch_parser = subparsers.add_parser("insert_finder_batch", help="finding inserts from .bam file")
+    insert_finder_batch_parser = subparsers.add_parser("insert_finder_batch", help="finding inserts from .bam file in Batch mode")
     insert_finder_batch_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Folder of folders including bam files")
     insert_finder_batch_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
 
@@ -67,6 +67,20 @@ def main():
     blast_annot_parser.add_argument("--no_temp", action="store_false", help="To delete temp folder, add this")
     blast_annot_parser.add_argument("--partial_threshold", type=int, default=80, help="For big insertions, if it has lower coverage than this value (and partial_len is used with this value), eliminate. Value: 0-100, default:80")
     blast_annot_parser.add_argument("--partial_len", type=int, default=8000, help="For big insertions, if it is higher than this value, elimiation will be based on partial threshold, It is effective if there is multiple IS and TNs together. default:8000")
+
+    blast_annot_batch_parser = subparsers.add_parser("blast_annot_batch", help="Annotation with Blast in Batch mode")
+    blast_annot_batch_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Folder of folders including bam files")
+    blast_annot_batch_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="path of genome in fasta format")
+    blast_annot_batch_parser.add_argument("--is_fasta", type=str, required=True, help="path of manually curated ISes")
+    blast_annot_batch_parser.add_argument("--temp", type=str, default="data/temp", help="temp directory, default :temp")
+    blast_annot_batch_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
+    blast_annot_batch_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
+    blast_annot_batch_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
+    blast_annot_batch_parser.add_argument("--no_temp", action="store_false", help="To delete temp folder, add this")
+    blast_annot_batch_parser.add_argument("--partial_threshold", type=int, default=80, help="For big insertions, if it has lower coverage than this value (and partial_len is used with this value), eliminate. Value: 0-100, default:80")
+    blast_annot_batch_parser.add_argument("--partial_len", type=int, default=8000, help="For big insertions, if it is higher than this value, elimiation will be based on partial threshold, It is effective if there is multiple IS and TNs together. default:8000")
+
+
 
     is_stat_parser = subparsers.add_parser("is_stat", help="Stats of ISes and Tn's")
     is_stat_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
@@ -150,7 +164,7 @@ def main():
         #BATCH VERSION
         elif args.command == "insert_finder_batch":
             from src.e_insert_finder_from_bam_batch import main_insert_finder_from_bam_batch
-            print(f"\nMapping process\nInput BAM: {args.input_dir}, \nThreshold: {args.threshold}")
+            print(f"\n[BATCH] Mapping process\nInput BAM: {args.input_dir}, \nThreshold: {args.threshold}")
             main_insert_finder_from_bam_batch(args.input_dir, args.threshold)
 
 
@@ -160,6 +174,13 @@ def main():
             from src.g_blast_annot import main_annot
             print(f"\nBlasting to annotate insertions..\n")
             main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
+        #G_BLAST_ANNOT_BATCH
+        elif args.command == "blast_annot_batch":
+            from src.g_blast_annot_batch import main_annot_batch
+            print(f"\n[BATCH] Blasting to annotate insertions..\n")
+            main_annot_batch(args.input_dir, args.genome_fasta, args.is_fasta, args.temp,  args.threshold, args.threads, args.debug, args.no_temp,  args.partial_threshold, args.partial_len)
+
+
 
         #H_IS_Stats
         elif args.command == "is_stat":
