@@ -109,7 +109,7 @@ def process_blast_m(input_fasta, query_fasta, batch_size, blast_db_dir, output_d
 
 
 # BLAST sonuçlarını analiz etmek için fonksiyon
-def analyze_blast_results(query_id, blast_df_raw, query_start_csv, query_end_csv, fasta_path, query_file, threshold=200, repeat_th=30):
+def analyze_blast_results(query_id, blast_df_raw, query_start_csv, query_end_csv, fasta_path, sequence, threshold, repeat_th):
 
 
 
@@ -123,10 +123,6 @@ def analyze_blast_results(query_id, blast_df_raw, query_start_csv, query_end_csv
     if blast_df.empty:
         print(f"No rows found for sseqid: {query_id}")
         return []  # veya uygun bir değer döndürebilirsiniz
-    
-    for record in SeqIO.parse(query_file, "fasta"):
-        sequence = str(record.seq)
-        break  # Tek bir kayıt varsa, döngüden çık
 
     overlaps = []
     #print(blast_df)
@@ -278,55 +274,15 @@ def simple_loading_bar(current, total):
     print(f"\rProcessing: [{bar}] {progress}% ({current}/{total})", end='', flush=True)
 
 
-
+#Old function:
 def perform_blast_with_os(query_fasta, subject_fasta, fasta_db, xml_output):
     os.system(f"makeblastdb -in {subject_fasta} -dbtype nucl -out {fasta_db} > /dev/null 2>&1")
     os.system(f"blastn -query {query_fasta} -db {fasta_db} -out {xml_output} -outfmt 6 -max_target_seqs 0") #For unlimited hits
 
 
 
-def process_row(index, row, blast_out, fasta_path, plasmid_fasta, out_ins_file, len_reads_items, original_stdout):
-    simple_loading_bar(index + 1, len_reads_items)
-    sys.stdout = open(os.devnull, 'w')
-    
-    query_id = row['Query ID'].split('_')[0]
-    q_st = int(row['Query ID'].split('_')[1])
-    q_end = int(row['Query ID'].split('_')[2])
-    subject_id = row['Subject ID']
-    
-    overlaps = analyze_blast_results(query_id, blast_out, q_st, q_end, fasta_path, plasmid_fasta)
-    
-    # Writing results to CSV
-    for overlap in overlaps:
-        result_df = pd.DataFrame({
-            "Read ID": [query_id],
-            "Subject ID": [subject_id],
-            "Query Start CSV": [q_st],
-            "Query End CSV": [q_end],
-            "Start Subject": [overlap["Start Subject"]],
-            "End Subject": [overlap["End Subject"]],
-            "Insertion Point": [overlap["Insertion Point"]],
-            "Repeat Length": [overlap["Repeat Length"]],
-            "Overlap Sequence": [overlap["Overlap Sequence"]]
-        })
-        save_to_csv(result_df, out_ins_file)
-    
-    sys.stdout = original_stdout
 
-# Function to handle multithreading
-def process_with_threads(df, blast_out, fasta_path, plasmid_fasta, out_ins_file, len_reads_items):
-    # Using ThreadPoolExecutor to process rows in parallel
-    with ThreadPoolExecutor() as executor:
-        futures = []
-        for index, row in df.iterrows():
-            futures.append(executor.submit(process_row, index, row, blast_out, fasta_path, plasmid_fasta, out_ins_file, len_reads_items, sys.stdout))
-        
-        # Wait for all threads to complete
-        for future in futures:
-            future.result()
-
-
-def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
+def main_dr_finder(current_dir, plasmid_fasta, open_gap, threshold, repeat_th, force_w=True):
     
     original_stdout = sys.stdout #For debugging 
 
@@ -341,12 +297,6 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
         os.makedirs(ins_dir)
 
 
-    #open_gap = 500
-    #query_file = "01_pMAT1_plasmid.fasta"
-
-
-
-
     # Klasörleri gezip her klasördeki işlemleri gerçekleştiriyoruz
     for folder in os.listdir(current_dir):
         folder_path = os.path.join(current_dir, folder)
@@ -355,7 +305,7 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
         if os.path.isdir(folder_path):
             print(folder_path)
             out_ins_file = os.path.join(ins_dir, f"{folder}_dr_insertionsv2.csv")
-
+            results_txt_list = []
 
             if os.path.exists(out_ins_file) and force_w:
                 print(f"{out_ins_file} already exist, deleting...")
@@ -383,7 +333,7 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
 
             temp_fasta_db = os.path.splitext(temp_fasta)[0] + '_db'
 
-            batch_size = 100
+            batch_size = 200
             
             blast_out = process_blast_m(temp_fasta, plasmid_fasta, batch_size, temp_dir, temp_dir)
             #blast_out = process_large_blast(plasmid_fasta, batch_size, temp_fasta, temp_fasta_db, temp_dir)
@@ -392,9 +342,23 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
             best_alignment_path = os.path.join(folder_path, best_alignment_csv)
             
             # CSV dosyasını oku
+            try:
+                df = pd.read_csv(blast_out)
+            except pd.errors.EmptyDataError:
+                print(f"{blast_out} boş ya da okunabilir veri yok.")
+                df = None
+                continue    
             df = pd.read_csv(best_alignment_path, sep='\t')
             
+                
+            for record in SeqIO.parse(plasmid_fasta, "fasta"):
+                sequence = str(record.seq)
+                break  # Tek bir kayıt varsa, döngüden çık
+
+
             len_reads_items = len(df)
+            blast_df_raw = pd.read_csv(blast_out, sep='\t', header=None)
+
             # Her bir Query ID için işlem yap
             for index, row in df.iterrows():
                 simple_loading_bar(index + 1, len_reads_items)
@@ -405,15 +369,7 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
                 q_end = int(row['Query ID'].split('_')[2])
                 subject_id = row['Subject ID']
 
-                try:
-                    df = pd.read_csv(blast_out)
-                except pd.errors.EmptyDataError:
-                    print(f"{blast_out} boş ya da okunabilir veri yok.")
-                    df = None
-                    continue    
-    
-                blast_df_raw = pd.read_csv(blast_out, sep='\t', header=None)
-                overlaps = analyze_blast_results(query_id, blast_df_raw, q_st, q_end, fasta_path, plasmid_fasta)
+                overlaps = analyze_blast_results(query_id, blast_df_raw, q_st, q_end, fasta_path, sequence, threshold, repeat_th)
                 
                 # Örnek sonuçları CSV'ye yazma
                 for overlap in overlaps:
@@ -428,11 +384,14 @@ def main_dr_finder(current_dir, plasmid_fasta, open_gap, force_w=True):
                         "Repeat Length": [overlap["Repeat Length"]],
                         "Overlap Sequence": [overlap["Overlap Sequence"]]
                     })
-                    save_to_csv(result_df, out_ins_file)
+                    results_txt_list.append(result_df)
                 sys.stdout = original_stdout
+            combined_df = pd.concat(results_txt_list, ignore_index=True)
+            save_to_csv(combined_df, out_ins_file)
+
             print('Control the file')
             
 
 
-
-main_dr_finder("data", "data/01_pMAT1_plasmid.fasta", 500)
+#looking the folders in data to find *best_alignment.tab inputs...
+#main_dr_finder("data", "data/01_pMAT1_plasmid.fasta", 500, 200, 30)

@@ -1,11 +1,5 @@
 import argparse
-from src.a_read_histograms import plot_histogram
-from src.b_filtering_based_on_len import filter_fastq_by_length
-from src.a_data_mapping import main_mapping
-from src.e_insert_finder_from_bam import main_insert_finder_from_bam
-from src.g_blast_annot import main_annot
-from src.h_is_stats import main_is_stat
-from src.j_dr_finder import main_dr_finder
+
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -82,10 +76,16 @@ def main():
     dr_finder_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
     dr_finder_parser.add_argument("-p", "--plasmid", type=str, required=True, help="Path of trap plasmid in fasta format")
     dr_finder_parser.add_argument("-g", "--gap", type=int, default=500, help="Gap, to extract more left and right flanking sequences from reads, deafult: 500")
+    dr_finder_parser.add_argument("-t", "--threshold", type=int, default=200, help="Threshold to eliminate insertion start and end coordinates in plasmid, default 200")
+    dr_finder_parser.add_argument("-r", "--repeat_threshold", type=int, default=30, help="Max len of repeats, deafult: 30")
 
 
     # Arguments
     args = parser.parse_args()
+
+
+
+
 
     #A_READ_HISTOGRAMS
     if args.all_help:
@@ -97,6 +97,7 @@ def main():
             print("\n" + "-"*40 + "\n")
     else:
         if args.command == "read_histogram":
+            from src.a_read_histograms import plot_histogram
             if args.verbose:
                 print('Histograms')
             else:
@@ -104,29 +105,34 @@ def main():
                 plot_histogram(args.fastq, args.output)
         #B_FILTER
         elif args.command == "filter":
+            from src.b_filtering_based_on_len import filter_fastq_by_length
             print(f"Filter process, Input: {args.fastq}, Output: {args.output}, Filter Len: {args.length}")
             filter_fastq_by_length(args.fastq, args.output, args.length)
             print('Filter process was ended')          
         #
         #C_ALIGNMENT
         elif args.command == "map":
+            from src.a_data_mapping import main_mapping
             print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
             main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
             print('Mapping process was ended')
 
         #E_INSERT_FINDER_FROM_BAM
         elif args.command == "insert_finder":
+            from src.e_insert_finder_from_bam import main_insert_finder_from_bam
             print(f"\nMapping process\nInput BAM: {args.bam}, \nOutput: {args.output}, \nThreshold: {args.threshold}")
             main_insert_finder_from_bam(args.bam, args.output, args.threshold)
 
 
         #G_BLAST_THE_INSERTS_
         elif args.command == "blast_annot":
+            from src.g_blast_annot import main_annot
             print(f"\nBlasting to annotate insertions..\n")
             main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
 
         #H_IS_Stats
         elif args.command == "is_stat":
+            from src.h_is_stats import main_is_stat
             print(f"\nStats of ISes..\n")
             main_is_stat(args.input_dir, args.output)
 
@@ -138,8 +144,9 @@ def main():
 
         #J_DR_finder
         elif args.command == "dr_finder":
+            from src.j_dr_finder_multithread import main_dr_finder
             print(f"\nFinding DRs..\n")
-            main_dr_finder(args.input_dir, args.plasmid, args.gap)
+            main_dr_finder(args.input_dir, args.plasmid, args.gap, args.threshold, args.repeat_threshold)
 
         else:
             print("Please enter a command.")
