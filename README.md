@@ -6,9 +6,11 @@
 
 - [Installation](#installation)
 - [Usage](#usage)
-  - [Input Data Analysis](#input-data-analysis)
+- [Input Data Analysis](#input-data-analysis)
   - [Read Length Histograms](#read-length-histograms)
-  - [Alignment](#alignment)
+- [Alignment](#alignment)
+  - [Map](#map)
+- [Analysis](#analysis)
   - [Insertion Finder](#insertion-finder)
   - [Manually curated Transposons](#manually-curated-transposons)
   - [Annotation of Insertions](#annotation-of-insertions)
@@ -23,7 +25,7 @@
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
 - [FAQ](#faq)
   - [How Can I Cite trapo-seq?](#how-can-i-cite-trapo-seq?)
-- [Licence](#licence)
+- [License](#license)
 
 
 
@@ -34,7 +36,7 @@
 
 **trapo-seq** is a traposome sequencing pipeline for trap plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
 
-First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
+
 
 
 
@@ -93,6 +95,7 @@ python trapo-seq.py -h
 
 # Usage
 
+First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
 # Input Data Analysis
 
@@ -134,7 +137,9 @@ python trapo-seq.py filter -f data/barcode01/data.fastq -o data/barcode01/read_l
 - **-l** filtering threshold 
 
 
-## Alignment
+# Alignment
+
+## Map
 
 ### Requirements
 - [minimap2](https://github.com/lh3/minimap2)
@@ -174,6 +179,7 @@ During barcoding, different barcodes can get mixed up with other barcodes or tha
 You can also look the docs section [for taking extra info about sam file and CIGAR strings](/docs#understanding-cigar-string). If you want to analyse your data with different tools than minimap2, the insertion finding algorithm can need some adjustments. I tested it with [bwa-mem](https://github.com/lh3/bwa), and it is working fine but I do not know others.
 
 
+# Analysis
 ## Insertion Finder
 
 This module will find insertions using bam files created by mapping module. Just give the data folder as input and it will hopefully detect and analyze bam files.
@@ -317,11 +323,19 @@ Example output:
 The output (insertion_from_bam.tab) from [Annotation of Insertions](#annotation-of-insertions) can be used to extract insertion points (**ref_pos** in the .tab file).  
 ## DR Finder
 
-Transposition event can create **direct repeats (DR)**. Direct repeats in transposons are short, identical sequences of DNA that flank the insertion site of a transposon. These repeats are generated during the transposition process (**not generated in all transposition events!**), leaving overhangs that are subsequently filled in, creating duplicated sequences on either side of the transposon. Blasting reference sequence to the reads **can reveal overlapping regions** near the insertion point (**ref_pos**) so the DRs.
+Transposition event can create **direct repeats (DR)**. Direct repeats in transposons are short, identical sequences of DNA that flank the insertion site of a transposon. These repeats are generated during the transposition process (**not generated in all transposition events!**), leaving overhangs that are subsequently filled in, creating duplicated sequences on either side of the transposon. Blasting reference sequence to the reads **can reveal overlapping regions** near the insertion point (**ref_pos**):  **The possible DRs.**
+
+An example output of DR Finder module (insertions.csv):
+
+| Read ID	| Subject ID	| Query Start |	Query End |	Start Subject	| End Subject	| Insertion Point |	Repeat Length	| Overlap Sequence |
+|----------|------------|-----------------|---------------|----------------|-------------|----------------|---------------|-------------|
+| read1	| IS5_IS15 |    	8726	         | 9883	         | 4854	           | 4856        |	4854         |	3           |	CTA |
+| read2	| no blast hit	|5416	            |6742           |	4839	         | 4850	       | 4839         |	12	         | TGCTTGGTTATG |
+</br>
 
 ## DR Sequence Logos
 
-Some transposons exhibit a high degree of specificity for insertion points, meaning they consistently **target particular sequences** or structural features in the host genome. This specificity can result in **conserved direct repeats** flanking the insertion site, as the transposase enzyme recognizes and targets specific DNA motifs. Conversely, some transposons display more flexibility in insertion sites, leading to less conserved or even absent direct repeats. This variability in insertion specificity and repeat conservation depends on the transposon's mechanism and the interaction between the transposase enzyme and the host genome. Such differences are significant in understanding the evolutionary impact and functional role of transposons in various genomic contexts
+Some transposons exhibit a high degree of specificity for insertion points, meaning they consistently **target particular sequences** or structural features in the host genome. This specificity can result in **conserved direct repeats** flanking the insertion as the transposase enzyme recognizes and targets **specific DNA motifs**. Conversely, some transposons display more flexibility in insertion sites, leading to less conserved or even absent direct repeats. This variability in insertion specificity and repeat conservation depends on the transposon's mechanism and the interaction between the transposase enzyme and the host genome. Such differences are significant in understanding the evolutionary impact and functional role of transposons in various genomic contexts
 
 
 ### Requirements
@@ -337,16 +351,18 @@ python trapo-seq.py dr_logo -d data/insertions -p data/01_pMAT1_plasmid.fasta -o
 - **-t** output file (*.tsv) (to summarize heatmap data)
 
 
-Conservation of overlapping regions can reveal direct repeats and insertion point's specificity of transposons. To reveal the conservation of direct repeats; sequence logos with aligning the overlapping regions are made in this module for each transposon identified in the previous modules.
+Conservation of overlapping regions can reveal direct repeats and insertion point's specificity of transposons. To reveal the conservation of direct repeats; sequence logos with aligning the overlapping regions are made in this module for each transposon identified in the previous modules. The length of the logo depends on the alignment length*.
 
 An example output for one of the transposon:
 
 ![example_sequence_logo](/images/example_sequence_logo.png)
 
-**Figure 2:** As an example, TGCTTGGTT is a 8 bp insertion site for this transposon. The closest transposon in ISFinder has DR as TGCTGAATT (close but different), so new insertion points can be found with the help of [**trapo-seq**](https://github.com/recepcanaltinbag/trapo-seq).
+**Figure 3:** As an example, TGCTTGGTTATG is a 12 bp insertion site for this transposon (**TGCTTGGTT** is highly conserved). The closest transposon in ISFinder has DR as TGCTGAATT (close but different), so new insertion points can be found with the help of [**trapo-seq**](https://github.com/recepcanaltinbag/trapo-seq).
 
+*(for DR alignments of each transposon; most common length is chosen)
 
 ## Kde Plots 
+
 
 
 
@@ -366,9 +382,9 @@ An example output for one of the transposon:
 
 
 
-## Licence
+## License
 
-[MIT Licence](https://github.com/recepcanaltinbag/trapo-seq/tree/main?tab=MIT-1-ov-file)
+[MIT License](https://github.com/recepcanaltinbag/trapo-seq/tree/main?tab=MIT-1-ov-file)
 
 
 ## Requirements based on each module 
