@@ -26,7 +26,7 @@
 - [FAQ](#faq)
   - [How Can I Cite trapo-seq?](#how-can-i-cite-trapo-seq?)
 - [License](#license)
-
+- [Flowchart](#flowchart)
 
 
 
@@ -51,7 +51,7 @@
 **Libraries:**
 - [matplotlib]() (read_histogram, heatmap, dr_logo, in_del_plot, kde_mobile, map_dist)
 - [biopython]() (filter, blast_annot_batch, is_stat, heatmap, dr_finder, dr_logo)
-- [pandas]() (is_stat, heatmap, dr_finder, dr_logo)
+- [pandas]() (is_stat, heatmap, dr_finder, dr_logo, in_del_plot)
 - [seaborn]() (heatmap, dr_logo, kde_mobile)
 - [numpy]() (heatmap, dr_logo)
 - [pysam]() (insert_finder_batch, in_del_plot, kde_mobile, map_dist)
@@ -97,6 +97,8 @@ python trapo-seq.py -h
 
 First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
+[The general structure](#flowchart) of the pipeline (relation of modules and input/output files can be seen as flowchart)
+
 # Input Data Analysis
 
 ## Read Length Histograms
@@ -118,7 +120,6 @@ As an example output (Figure 1):
 The original size of this trap plasmid is 7kb, but there are reads more than 7 kb such as around 8. So, it can be said that there are some insertions but the most of the plasmid data do not have insertions.
 
 ![example_output](/images/read_len-1.png)
-
 **Figure 1:** Non weighted histogram graph of plasmid reads.
 
 ## Filtering
@@ -314,7 +315,6 @@ python trapo-seq.py heatmap -r data/is_stats.rcp -o data/heatmap.pdf -t data/hea
 Example output:
 
 ![example_heatmap](/images/example_heatmap.png)
-
 **Figure 2:** Distribution of transposons in different conditions (barcodes).
 **Hint**: You can the barcode order in .rcp file to change the order in the heatmap.
 
@@ -356,23 +356,45 @@ Conservation of overlapping regions can reveal direct repeats and insertion poin
 An example output for one of the transposon:
 
 ![example_sequence_logo](/images/example_sequence_logo.png)
-
 **Figure 3:** As an example, TGCTTGGTTATG is a 12 bp insertion site for this transposon (**TGCTTGGTT** is highly conserved). The closest transposon in ISFinder has DR as TGCTGAATT (close but different), so new insertion points can be found with the help of [**trapo-seq**](https://github.com/recepcanaltinbag/trapo-seq).
 
 *(for DR alignments of each transposon; most common length is chosen)
 
 ## Kde Plots 
 
+You can visualize **the insertions from the BAM file** using the **kde_plot** module. This module can be run after the [Insertion Finder](#insertion-finder) step, as it requires the insertion output. It can be used to examine the distribution of insertions under different conditions. Instead of showing the exact insertion points, it displays **the general trend**; total number of bases in each read coming from the plasmid and genome.
 
+```
+python trapo-seq.py kde_mobile -b data/barcode01/03_sorted_mapped_to_plasmid.bam -o kde_plot
+```
+- **-b** bam file with prefix: 03*.bam
+- **-o** output name (.pdf)
 
+An example output:
+
+![example_kde](/images/example_kde.png)
+**Figure 3:** Kde Plot of insertions.
 
 
 ## Possible Excisions
 
+Transposons can sometimes excise themselves after insertion, a process known as excision, in such cases the number of insertions may appear low. In order to reveal this situation, it may be useful to view insertions and deletions as weighted because in some cases, transposons can create deletions in the plasmid sequence while exiting.
 
+```
+python trapo-seq.py in_del_plot -i data/barcode01/insertion_from_bam.tab -b data/barcode01/03_sorted_mapped_to_plasmid.bam -o in_del_plot
+```
+- **-i** insertion file (.tab)
+- **-b** bam file with prefix: 03*.bam
+- **-o** output name (.pdf)
 
+An example output:
+
+![example_kde](/images/example_in_del_plot.png)
+**Figure 4:** In-del Plot for insertions and deletions. Weighted insertions are higher when compared to deletions, so there is no significant excision. And, most of the insertions are between 3800-5000 bp region, for that case it is expected (This region contains the selective gene) but can be changed from experiment to experiment.   
 
 ## Mutation and Variant Analysis 
+
+If  the insertion deficiency cannot be revealed in the in-del plot, you can perform mutation and variant analysis. For this, you can use an external program (SNP, variant analysis) for long reads. You can also use the (*_insertion_table.tsv, *_deletion_table.tsv) files created after the in_del_plot module.
 
 
 
@@ -387,14 +409,16 @@ An example output for one of the transposon:
 [MIT License](https://github.com/recepcanaltinbag/trapo-seq/tree/main?tab=MIT-1-ov-file)
 
 
-## Requirements based on each module 
 
 
-- read_histogram
-  - matplotlib
-- filter
-  - biopython
-- map
+## Flowchart
+
+![example_kde](/images/example_flowchart.png)
+
+
+
+### Requirements based on each module 
+
   - minimap2
   - samtools
 - insert_finder_batch
@@ -423,6 +447,7 @@ An example output for one of the transposon:
 - in_del_plot
   - matplotlib
   - pysam
+  - pandas
 - kde_mobile
   - matplolib
   - pysam

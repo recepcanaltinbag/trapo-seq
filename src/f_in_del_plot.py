@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 import pysam
 import os
+import pandas as pd
 
 def parse_insertion_tab_file(file_path):
     idct = defaultdict(list)
@@ -112,7 +113,23 @@ def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, outp
     print(f"{output}_{name}.pdf saved")
     #plt.show()
 
+    # Combine insertion and deletion data into a DataFrame
+    data_insertions = {
+        "Insertion Position": sorted_insertion_positions,
+        "Insertion Count": sorted_insertion_counts,
+    }
+    data_deletions = {
+        "Deletion Position": sorted_deletion_positions,
+        "Deletion Count": sorted_deletion_counts
+    }
+    df_ins = pd.DataFrame(data_insertions)
+    df_del = pd.DataFrame(data_deletions)
 
+    # Save to a tab-delimited file
+    df_ins.to_csv(f'{output}_{name}_insertion_table.tsv', sep='\t', index=False)
+    df_del.to_csv(f'{output}_{name}_deletion_table.tsv', sep='\t', index=False)
+    print(f"{output}_{name}.insertion_table.tsv saved")
+    print(f"{output}_{name}.deletion_table.tsv saved")
 
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------
