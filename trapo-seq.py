@@ -58,7 +58,7 @@ def main():
     blast_annot_parser.add_argument("-i", "--ins_bam", type=str, required=True, help="Path of insertions from bam tabular file")
     blast_annot_parser.add_argument("-m", "--mapped_fasta", type=str, required=True, help="path of mapped reads in fasta format")
     blast_annot_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="path of genome in fasta format")
-    blast_annot_parser.add_argument("--is_fasta", type=str, required=True, help="path of manually curated ISes")
+    blast_annot_parser.add_argument("--is_fasta", type=str, required=False, help="path of manually curated ISes")
     blast_annot_parser.add_argument("--temp", type=str, default="data/temp", help="temp directory, default :temp")
     blast_annot_parser.add_argument("-o", "--output", type=str, default="best_alignments.tab", help="Output file")
     blast_annot_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
@@ -178,6 +178,9 @@ def main():
         elif args.command == "blast_annot_batch":
             from src.g_blast_annot_batch import main_annot_batch
             print(f"\n[BATCH] Blasting to annotate insertions..\n")
+            the_is_fasta = args.is_fasta
+            if args.is_fasta == None:
+                the_is_fasta = 'src/dummy_is_file.fasta'
             main_annot_batch(args.input_dir, args.genome_fasta, args.is_fasta, args.temp,  args.threshold, args.threads, args.debug, args.no_temp,  args.partial_threshold, args.partial_len)
 
 
