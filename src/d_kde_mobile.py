@@ -224,8 +224,8 @@ def plot_read_distribution(read_distribution, output, plasmid_threshold, genome_
                                   the value is a dictionary with 'plasmid' and 'genome' base pair information.
     """
     # Extract plasmid and genome base pair information
-    plasmid_bps = [info["plasmid"] for info in read_distribution.values()]
-    genome_bps = [info["genome"] for info in read_distribution.values()]
+    plasmid_bps = [info["plasmid"] for info in read_distribution.values() if info["plasmid"] > plasmid_threshold]
+    genome_bps = [info["genome"] for info in read_distribution.values() if info["genome"] > genome_threshold]
     
     # Set up the plot
     plt.figure(figsize=(12, 6))
