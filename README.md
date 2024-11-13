@@ -23,6 +23,7 @@
   - [Kde Plots](#kde-plots)
   - [Possible Excisions](#possible-excisions)
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
+  - [Map Distribution](#map-distribution)
 - [FAQ](#faq)
   - [How Can I Cite trapo-seq?](#how-can-i-cite-trapo-seq?)
 - [License](#license)
@@ -398,15 +399,30 @@ If  the insertion deficiency cannot be revealed in the in-del plot, you can perf
 
 
 
+## Map Distribution
+
+The **map-dist** module can be used to see the distributions of reads based on their location in the genome and plasmid, so the mobile sections of the genome can be seen.
+
+```
+python trapo-seq.py map_dist -b data/barcode01/03_sorted_mapped_to_plasmid.bam -o map_dist
+```
+- **-b** bam file with prefix: 03*.bam
+- **-o** output name (.pdf)
+
+
+
+![example_map_dist](/images/example_map_dist.png)
+**Figure 4:** Read distributions on plasmid and genome. For the plasmid; around 3000 there is a certain peak which is actually caused by restriction enzyme, and also peaks around 4000 which is caused by transpositions. For the genome; around ~2.4 Mbp and ~6.8 Mbp, sections are very mobile. This output can not be used for exact locations, but can give an idea about general trend and can be helpful in undesired conditions.
+
 # FAQ
 
 ## How Can I Cite trapo-seq?
 
-
+Hopefully the paper will come soon :), for now, this github page. 
 
 ## License
 
-[MIT License](https://github.com/recepcanaltinbag/trapo-seq/tree/main?tab=MIT-1-ov-file)
+This software in under [MIT License](https://github.com/recepcanaltinbag/trapo-seq/tree/main?tab=MIT-1-ov-file). Copyright (c) 2024 Recep Can Altınbağ
 
 
 
