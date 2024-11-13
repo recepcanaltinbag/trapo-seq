@@ -215,7 +215,7 @@ def write_read_distribution_to_file(read_distribution, file_path):
             file.write(f"{read_id}\t{plasmid_bps}\t{genome_bps}\n")
 
 
-def plot_read_distribution(read_distribution, output):
+def plot_read_distribution(read_distribution, output, plasmid_threshold, genome_threshold):
     """
     Plot the read base pair distribution between plasmid and genome as a KDE plot.
     
@@ -326,7 +326,7 @@ output_kde = "kde_plot_plasmid_and_genome"
 #--
 #--------------------------------------------------
 
-def main_kde_mobile(plasmid_bam, output_kde):
+def main_kde_mobile(plasmid_bam, output_kde, plasmid_threshold, genome_threshold):
     dir_path = os.path.dirname(os.path.abspath(plasmid_bam))
     output = os.path.join(dir_path, output_kde)
 
@@ -346,7 +346,7 @@ def main_kde_mobile(plasmid_bam, output_kde):
     write_read_distribution_to_file(read_distribution, output)
     print("output file tabular: ", output + '.tab')
 
-    plot_read_distribution(read_distribution, output)
+    plot_read_distribution(read_distribution, output, plasmid_threshold, genome_threshold)
 
     #Hotspots need to be develpoed better, homologous regions in the genome can be problem.
     #hotspots = identify_hotspots(read_distribution, genome_reads, genome_length)
