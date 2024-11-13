@@ -23,7 +23,7 @@
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
 - [FAQ](#faq)
   - [How Can I Cite trapo-seq?](#how-can-i-cite-trapo-seq?)
-- [License](#license)
+- [Licence](#licence)
 
 
 
