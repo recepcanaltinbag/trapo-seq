@@ -4,8 +4,7 @@
 
 
 
-- [Test](#test)
-- [Quick Start](#quick-start)
+- [Installation](#installation)
 - [Usage](#usage)
   - [Input Data Analysis](#input-data-analysis)
   - [Read Length Histograms](#read-length-histograms)
@@ -37,6 +36,64 @@
 
 First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
+
+
+# Installation
+
+
+
+## Requirements
+**For all modules:**
+- [Python]() (>v3.5) (For all modules)
+
+**Libraries:**
+- [matplotlib]() (read_histogram, heatmap, dr_logo, in_del_plot, kde_mobile, map_dist)
+- [biopython]() (filter, blast_annot_batch, is_stat, heatmap, dr_finder, dr_logo)
+- [pandas]() (is_stat, heatmap, dr_finder, dr_logo)
+- [seaborn]() (heatmap, dr_logo, kde_mobile)
+- [numpy]() (heatmap, dr_logo)
+- [pysam]() (insert_finder_batch, in_del_plot, kde_mobile, map_dist)
+
+### **Option 1:** Using pip
+
+```
+pip install matplotlib biopython pandas seaborn numpy pysam
+```
+### **Option 2:** Using conda **(recommended)**
+```
+conda create -n trapo-seq-env python=3.8 matplotlib biopython pandas seaborn numpy pysam -y
+```
+
+**External programs**: for installation please visit the links below, each can have different procedures:
+- [minimap2](https://github.com/lh3/minimap2) (map)
+- [samtools](https://github.com/samtools/samtools) (map)
+- [blastn](https://www.ncbi.nlm.nih.gov/books/NBK569861/) (blast_annot_batch)
+- [makeblastdb](https://www.ncbi.nlm.nih.gov/books/NBK569861/) (blast_annot_batch)
+- [MAFFT](http://mafft.cbrc.jp/alignment/software/) (dr_logo)
+
+After installation. Run the script below, If you don't see any errors in the output, all programs have been successfully installed. Don't forget to add them to the PATH.
+
+```
+minimap2 --version
+samtools --version
+blastn -version
+makeblastdb -version
+mafft --version
+python --version
+
+```
+
+Quick start:
+
+```
+conda activate trapo-seq-env
+python trapo-seq.py -h
+```
+
+
+# Usage
+
+
 # Input Data Analysis
 
 ## Read Length Histograms
@@ -59,7 +116,7 @@ The original size of this trap plasmid is 7kb, but there are reads more than 7 k
 
 ![example_output](/images/read_len-1.png)
 
-Figure 1: Non weighted histogram graph of plasmid reads.
+**Figure 1:** Non weighted histogram graph of plasmid reads.
 
 ## Filtering
 
@@ -238,7 +295,7 @@ The next step (**heatmap module**) needs this exact format (.rcp) as input. If y
 
 ## Heatmap of Transposons
 
-According to stats of previous module output, it will create a heatmap. 
+According to stats of previous module output, it will create a heatmap splitting into two sections as low and high frequency transposons. 
 
 ```
 python trapo-seq.py heatmap -r data/is_stats.rcp -o data/heatmap.pdf -t data/heatmap.tsv
@@ -252,17 +309,41 @@ Example output:
 
 ![example_heatmap](/images/example_heatmap.png)
 
-Figure 1: Distribution of transposons in different conditions.
+**Figure 2:** Distribution of transposons in different conditions (barcodes).
 **Hint**: You can the barcode order in .rcp file to change the order in the heatmap.
 
 ## Insertion Coordinates
 
-
+The output (insertion_from_bam.tab) from [Annotation of Insertions](#annotation-of-insertions) can be used to extract insertion points (**ref_pos** in the .tab file).  
 ## DR Finder
 
+Transposition event can create **direct repeats (DR)**. Direct repeats in transposons are short, identical sequences of DNA that flank the insertion site of a transposon. These repeats are generated during the transposition process (**not generated in all transposition events!**), leaving overhangs that are subsequently filled in, creating duplicated sequences on either side of the transposon. Blasting reference sequence to the reads **can reveal overlapping regions** near the insertion point (**ref_pos**) so the DRs.
 
 ## DR Sequence Logos
 
+Some transposons exhibit a high degree of specificity for insertion points, meaning they consistently **target particular sequences** or structural features in the host genome. This specificity can result in **conserved direct repeats** flanking the insertion site, as the transposase enzyme recognizes and targets specific DNA motifs. Conversely, some transposons display more flexibility in insertion sites, leading to less conserved or even absent direct repeats. This variability in insertion specificity and repeat conservation depends on the transposon's mechanism and the interaction between the transposase enzyme and the host genome. Such differences are significant in understanding the evolutionary impact and functional role of transposons in various genomic contexts
+
+
+### Requirements
+  - [MAFFT](http://mafft.cbrc.jp/alignment/software/) (MAFFT is used to align sequences, so it needs to be in the PATH)
+```
+mafft --version
+```
+```
+python trapo-seq.py dr_logo -d data/insertions -p data/01_pMAT1_plasmid.fasta -o data/dr_logos
+```
+- **-d** directory which barcode folders having tab files (best_alignment.tab)
+- **-o** output pdf heatmap graph file (.pdf)
+- **-t** output file (*.tsv) (to summarize heatmap data)
+
+
+Conservation of overlapping regions can reveal direct repeats and insertion point's specificity of transposons. To reveal the conservation of direct repeats; sequence logos with aligning the overlapping regions are made in this module for each transposon identified in the previous modules.
+
+An example output for one of the transposon:
+
+![example_sequence_logo](/images/example_sequence_logo.png)
+
+**Figure 2:** As an example, TGCTTGGTT is a 8 bp insertion site for this transposon. The closest transposon in ISFinder has DR as TGCTGAATT (close but different), so new insertion points can be found with the help of [**trapo-seq**](https://github.com/recepcanaltinbag/trapo-seq).
 
 
 ## Kde Plots 
@@ -287,7 +368,49 @@ Figure 1: Distribution of transposons in different conditions.
 
 ## Licence
 
+[MIT Licence](https://github.com/recepcanaltinbag/trapo-seq/tree/main?tab=MIT-1-ov-file)
 
 
+## Requirements based on each module 
 
 
+- read_histogram
+  - matplotlib
+- filter
+  - biopython
+- map
+  - minimap2
+  - samtools
+- insert_finder_batch
+  - pysam
+- blast_annot_batch
+  - biopython
+  - blastn, makeblastdb
+- is_stat
+  - pandas
+  - biopython
+- heatmap
+  - seaborn
+  - matplotlib
+  - pandas
+  - numpy
+- dr_finder
+  - biopython
+  - pandas
+- dr_logo
+  - MAFFT
+  - pandas
+  - matplotlib
+  - seaborn
+  - biopython
+  - numpy
+- in_del_plot
+  - matplotlib
+  - pysam
+- kde_mobile
+  - matplolib
+  - pysam
+  - seaborn
+- map_dist
+  - pysam
+  - matplotlib
