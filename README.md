@@ -1,6 +1,6 @@
 ![example_output](/images/logov4.png)
 
-### Traposome Sequencing with Long Read Technologies
+### Traposome Sequencing Pipeline for Long Read Technologies
 
 
 
@@ -11,15 +11,15 @@
   - [Read Length Histograms](#read-length-histograms)
   - [Alignment](#alignment)
   - [Insertion Finder](#insertion-finder)
-    - [Manually curated Transposons](#manually-curated-transposons)
+  - [Manually curated Transposons](#manually-curated-transposons)
   - [Annotation of Insertions](#annotation-of-insertions)
-    - [Examining the novel inserts](#examining-the-novel-inserts)
-    - [Stats of Transposons](#stats-of-transposons)
-    - [Heatmap of Transposons](#heatmap-of-transposons)
-    - [Insertion Coordinates](#insertion-coordinates)
-    - [DR Finder](#dr-finder)
-    - [DR Sequence Logos](#dr-sequence-logos)
-    - [Kde Plots](#kde-plots)
+  - [Examining the novel inserts](#examining-the-novel-inserts)
+  - [Stats of Transposons](#stats-of-transposons)
+  - [Heatmap of Transposons](#heatmap-of-transposons)
+  - [Insertion Coordinates](#insertion-coordinates)
+  - [DR Finder](#dr-finder)
+  - [DR Sequence Logos](#dr-sequence-logos)
+  - [Kde Plots](#kde-plots)
   - [Possible Excisions](#possible-excisions)
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
 - [FAQ](#faq)
@@ -33,7 +33,7 @@
 
 
 
-**trapo-seq** is a traposome sequencing pipeline for plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements  that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
+**trapo-seq** is a traposome sequencing pipeline for trap plasmid sequencing with long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can read the plasmids as a whole, just one read can allow the complete sequence of the mobile elements that have trapped by the plasmid. This also helps to obtain high throughput traposome data. 
 
 First, assesing the quality of plasmid DNA library and the sequencing output is crucial. It would be appropriate to examine the length and quality distributions of the reads to check fragmentation.
 
@@ -41,15 +41,17 @@ First, assesing the quality of plasmid DNA library and the sequencing output is 
 
 ## Read Length Histograms
 
+If plasmids are extracted with sufficient purity, most of the reads are expected to be close to the length of the plasmid.
 ### Requirements
-- Basecalled and barcode demultiplexed .fastq files
-- **read_histogram** module is enough to handle, but there are other tools you can also use such as [NanoPlot](https://github.com/wdecoster/NanoPlot)
+- **read_histogram** module is enough to handle basic settings, but there are other tools you can also use such as [NanoPlot](https://github.com/wdecoster/NanoPlot)
 
 ```
 python trapo-seq.py read_histogram -f data/barcode01/data.fastq -o data/barcode01/read_len_hist
 ```
+- **-f** fastq file path
+- **-o** output file path
 
-If plasmids are extracted with sufficient purity, most of the reads are expected to be close to the length of the plasmid. The desired scenario is that there are mobile element insertions into the plasmids so the majority of reads are longer than the original plasmid. If there are shorter reads than, this may be due to: fragmentations while doing library preparation, the enzyme cuts more than one restriction site or the inserted mobile genetic elements have restriction site. For extra information please visit the [docs page](/docs#readme). So, it is crucial to pick restriction enzyme that does not cut mobile genetic elements and has only one restriction site on the plasmid. If the majority of the reads are not longer than the the original length of the plasmid, this may be explained by scenarios such as mutations on selective genes in plasmid or the mobile element excisions.
+ The desired scenario is that there are mobile element insertions into the plasmids so the majority of reads are longer than the original plasmid. If there are shorter reads than, this may be due to: fragmentations while doing library preparation, the enzyme cuts more than one restriction site or the inserted mobile genetic elements have restriction site. For extra information please visit the [docs page](/docs#readme). So, it is crucial to pick restriction enzyme that does not cut mobile genetic elements and has only one restriction site on the plasmid. If the majority of the reads are not longer than the the original length of the plasmid, this may be explained by scenarios such as mutations on selective genes in plasmid or the mobile element excisions.
 
 As an example output (Figure 1):
 
@@ -68,7 +70,7 @@ To eliminate the shorter reads, it is essential to filter. We want long reads to
 - If you want to filter only length-based (you do not need FiltLong) you can use **read_histogram** module, for more advanced filtering options you can use other programs like [FiltLong](https://github.com/rrwick/Filtlong):
 
 ```
-python trapo-seq.py read_histogram -f data/barcode01/data.fastq -o data/barcode01/read_len_hist -l 2000
+python trapo-seq.py filter -f data/barcode01/data.fastq -o data/barcode01/read_len_hist -l 2000
 ```
 - **-f** fastq file path
 - **-o** output file path
@@ -78,7 +80,6 @@ python trapo-seq.py read_histogram -f data/barcode01/data.fastq -o data/barcode0
 ## Alignment
 
 ### Requirements
-- Filtered .fastq files
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
 
@@ -134,49 +135,50 @@ Output of this step creates a tabular file in the format of:
 You can also look the docs section [to understand two different insert_types: IN, SC](/docs#extra-case-soft-clips)
 
 
-### Manually curated Transposons
+## Manually curated Transposons
 
-If you do not have any data about tranposons in your genome, you can still continue to this pipeline with an empty manually curated transposon file in the format of:
+If you do not have any data about tranposons in your genome, you can still continue to this pipeline without entering **--is_fasta** argument (the program will used dummy_is_file.fasta):
 
 ```
-IS_curated.fasta:
+dummy_is_file.fasta:
 
->NO_TRANSPOSONDATA
-ATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAADATGGCTGATGACAAD
+>IS3_ISAba66
+TGAACCGTACCGG...
 ```
-However, I recommend scanning the genome using tools like [ISFinder](https://www-is.biotoul.fr/index.php) or [ISescan](https://github.com/xiezhq/ISEScan) to identify unique transposons, and then proceeding with further analysis. And creating a file like this: Sequence IDs must be in the format **(>ISfamily_ISName)** such as (IS5_ISPs1). 
+And then you can investigate the insertions and corresponding genome locations to extract transposons and annotate through blasting with [ISFinder](https://www-is.biotoul.fr/index.php).
+
+However, I recommend scanning the genome before the next step using tools like [ISFinder](https://www-is.biotoul.fr/index.php) or [ISescan](https://github.com/xiezhq/ISEScan) to identify transposons, and then proceeding with further analysis. And creating a file like this as input for **--is_fasta**: Sequence IDs must be in the format **(>ISfamily_ISName)** such as (IS5_ISPs1). 
 
 ```
 IS_curated.fasta:
 
 >IS5_ISPs1
-ATGGCTGATGACAAD.....
+ATGGCTGATGACAAD...
 >IS3_ISPs5
-GCTGATGACAAD.....
+GCTGATGACAAD...
 ```
 
-Then, it is ready for next module.
+Then, it is ready for the next module.
 
 
 ## Annotation of Insertions
 
+In this step, the extracted insertions will be blasted in the genome and manually curated IS FASTA file, labeled accordingly, and the results will be presented in a tabular format. Also, the output of this module can be used to label transposons. 
 
-In this step, the extracted insertions will be searched in the genome and manually curated IS FASTA files, labeled accordingly, and the results will be presented in a tabular format. If there is a dummy manually curated IS file, the outputs of this module can be used to label transposons or insertion sequences. 
+### Requirements
+- [blastn and makeblastdb](https://www.ncbi.nlm.nih.gov/books/NBK569861/) in PATH
+
+```
+blastn -version
+makeblastdb -version
+```
 
 ```
 python trapo-seq.py blast_annot_batch -d data -g data/genome.fasta --is_fasta data/IS_curated.fasta --threads 12 --no_temp
 ```
-- **-d** directory which barcode folders having tab file (insertion_from_bam)
+- **-d** directory which barcode folders having tab files (*insertion_from_bam.tab)
 - **-g** genome sequence data path (*.fasta)
 - **--is_fasta** manually curated and labeled ISes (*.fasta) Sequence IDs must be in the format (>ISfamily_ISName) such as (IS5_ISPs1). Please have a look [Manually curated Transposons](#manually-curated-transposons)
-```
-IS_curated.fasta:
-
->IS5_ISPs1
-ATGGCTGATGACAAD.....
->IS3_ISPs5
-GCTGATGACAAD.....
-```
 - **--threads** how many threads can be possible (default 2)
 - **--no_temp** do not delete temp files, can be helpful for debugging 
 
@@ -190,31 +192,80 @@ The output of this module is a tabular file (*best_alignment.tab) in the format 
 </br>
 
 
-The most significant values in the table are **Explained**, **Note**, and **ref_pos**. The **"Explained"** value indicates how well the insertion can be aligned, demonstrating its relevance and matching with the manually curated database (**IS_DB**) or (**Genome**). If it aligns with a part of the **genome** rather than the database (IS_DB), it could potentially represent **a novel insertion**. The **"ref_pos"** value refers to the insertion point on the plasmid, marking the exact location where the insertion occurs.
+The most significant values in the table are **Explained**, **Note**, and **ref_pos**. The **"Explained"** value indicates how well the insertion can be aligned, demonstrating its relevance and matching with the manually curated database (**IS_DB**) or (**Genome**). If it aligns with a part of the **genome** rather than the database ((**IS_DB**), it can potentially represent **a novel insertion**. The **"ref_pos"** value refers to the insertion point on the plasmid, marking the exact location where the insertion occurs. If the insertion is labeled as **Contamination**, the insertion is not coming from genome or plasmid and can be an artifact related to sequencing, barcoding issues.
+
+
+## Examining the novel inserts
+
+One of the key advantages of this pipeline is its ability to identify **novel insertions** without relying exclusively on a database, allowing it to detect previously unreported insertions. For example, in the output table above, regions labeled as **'Genome'** in the **'Note'** column represent segments not found in the manually curated IS database. If a certain genomic region (The **'Subject Start' and 'Subject End'** columns indicate the location within the genome.) is observed in multiple reads and has **high 'Explained' (%)** values, you may want to extract this genomic section for further examination. You can search it against IS databases like [ISFinder](https://www-is.biotoul.fr/index.php) or use [BLAST on the NCBI website](https://blast.ncbi.nlm.nih.gov/Blast.cgi) to see which genes are in. 
 
 
 
-### Examining the novel inserts
+## Stats of Transposons
+
+This module can be used to summarize output tabular files (*best_alignment.tab) from the previous module.
+
+```
+python trapo-seq.py is_stat -d data -o data/is_stats.rcp
+```
+- **-d** directory which barcode folders having tab files (best_alignment.tab)
+- **-o** output file (*.rcp) (it is human-readable file format to summarize stats)
+
+An example output file (*.rcp) of this module:
+
+  - **>** -> name of condition
+  - **?** -> number of transposons
+  - **IS_Family, IS_Name, %, #** -> IS Family, IS Name, Percentage, Count 
+  - **---** -> splitting conditions
+```
+is_stats.rcp:
+
+>barcode01
+?40
+IS5, ISPa41, 50.00, 20
+IS3, ISPen2, 25.00, 10
+IS5, ISPs1, 25.00, 10
+---
+>barcode02
+?200
+IS3, ISPen2, 65.00, 130
+IS5, ISPs1, 25.00, 50
+IS5, ISPa41, 5.00, 10
+IS5, ISPa26, 5.00, 10
+```
+
+The next step (**heatmap module**) needs this exact format (.rcp) as input. If you have any other transposon distribution data, you can convert to (.rcp) format to run **heatmap module**.
+
+## Heatmap of Transposons
+
+According to stats of previous module output, it will create a heatmap. 
+
+```
+python trapo-seq.py heatmap -r data/is_stats.rcp -o data/heatmap.pdf -t data/heatmap.tsv
+```
+- **-d** directory which barcode folders having tab files (best_alignment.tab)
+- **-o** output pdf heatmap graph file (.pdf)
+- **-t** output file (*.tsv) (to summarize heatmap data)
+
+
+Example output:
+
+![example_heatmap](/images/example_heatmap.png)
+
+Figure 1: Distribution of transposons in different conditions.
+**Hint**: You can the barcode order in .rcp file to change the order in the heatmap.
+
+## Insertion Coordinates
+
+
+## DR Finder
+
+
+## DR Sequence Logos
 
 
 
-### Stats of Transposons
-
-
-### Heatmap of Transposons
-
-
-### Insertion Coordinates
-
-
-### DR Finder
-
-
-### DR Sequence Logos
-
-
-
-### Kde Plots 
+## Kde Plots 
 
 
 
