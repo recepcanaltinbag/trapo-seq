@@ -115,7 +115,6 @@ def main():
     kde_mobile_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
     kde_mobile_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     kde_mobile_parser.add_argument("--plasmid_threshold", type=int, default=2000, help="Plasmid len threshold, if the alignment len is lower than this disregard")
-    kde_mobile_parser.add_argument("--genome_threshold", type=int, default=2000, help="Genome len threshold, if the alignment len is lower than this disregard")
 
 
     map_dist_parser = subparsers.add_parser("map_dist", help="Plotting dist, to anaylze jumping DNA coordinates both genome and plasmid")
@@ -220,7 +219,7 @@ def main():
         elif args.command == "kde_mobile":
             from src.d_kde_mobile import main_kde_mobile
             print("\nPlotting kdes of mobile bpairs of genome...\n")
-            main_kde_mobile(args.bam, args.output, args.plasmid_threshold, args.genome_threshold)
+            main_kde_mobile(args.bam, args.output, args.plasmid_threshold)
         #C_MAP_DIST
         elif args.command == "map_dist":
             from src.c_map_dist import main_map_dist

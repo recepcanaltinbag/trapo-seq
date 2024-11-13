@@ -215,7 +215,7 @@ def write_read_distribution_to_file(read_distribution, file_path):
             file.write(f"{read_id}\t{plasmid_bps}\t{genome_bps}\n")
 
 
-def plot_read_distribution(read_distribution, output, plasmid_threshold, genome_threshold):
+def plot_read_distribution(read_distribution, output, plasmid_threshold):
     """
     Plot the read base pair distribution between plasmid and genome as a KDE plot.
     
@@ -224,14 +224,17 @@ def plot_read_distribution(read_distribution, output, plasmid_threshold, genome_
                                   the value is a dictionary with 'plasmid' and 'genome' base pair information.
     """
     # Extract plasmid and genome base pair information
-    plasmid_bps = [info["plasmid"] for info in read_distribution.values() if info["plasmid"] > plasmid_threshold]
-    genome_bps = [info["genome"] for info in read_distribution.values() if info["genome"] > genome_threshold]
+    plasmid_bps = [info["plasmid"] for info in read_distribution.values()]
+    genome_bps = [info["genome"] for info in read_distribution.values() ]
     
     # Set up the plot
     plt.figure(figsize=(12, 6))
     
+    filtered_plasmid_bps, filtered_genome_bps = zip(*[
+        (plasmid, genome) for plasmid, genome in zip(plasmid_bps, genome_bps) if plasmid > plasmid_threshold
+    ])
     # Plot KDE for both plasmid and genome base pairs
-    sns.kdeplot(x=plasmid_bps, y=genome_bps, cmap="coolwarm", fill=True, thresh=0.01)
+    sns.kdeplot(x=filtered_plasmid_bps, y=filtered_genome_bps, cmap="coolwarm", fill=True, thresh=0.01)
     
     plt.minorticks_on()
 
@@ -326,7 +329,7 @@ output_kde = "kde_plot_plasmid_and_genome"
 #--
 #--------------------------------------------------
 
-def main_kde_mobile(plasmid_bam, output_kde, plasmid_threshold, genome_threshold):
+def main_kde_mobile(plasmid_bam, output_kde, plasmid_threshold):
     dir_path = os.path.dirname(os.path.abspath(plasmid_bam))
     output = os.path.join(dir_path, output_kde)
 
@@ -346,7 +349,7 @@ def main_kde_mobile(plasmid_bam, output_kde, plasmid_threshold, genome_threshold
     write_read_distribution_to_file(read_distribution, output)
     print("output file tabular: ", output + '.tab')
 
-    plot_read_distribution(read_distribution, output, plasmid_threshold, genome_threshold)
+    plot_read_distribution(read_distribution, output, plasmid_threshold)
 
     #Hotspots need to be develpoed better, homologous regions in the genome can be problem.
     #hotspots = identify_hotspots(read_distribution, genome_reads, genome_length)
