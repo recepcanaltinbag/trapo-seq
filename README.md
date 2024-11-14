@@ -56,17 +56,17 @@
 - [seaborn]() (heatmap, dr_logo, kde_mobile)
 - [numpy]() (heatmap, dr_logo)
 - [pysam]() (insert_finder_batch, in_del_plot, kde_mobile, map_dist)
-
+- [logomaker]() (dr_logo)
 ### **Option 1:** Using pip
 
 ```
-pip install matplotlib biopython pandas seaborn numpy pysam
+pip install matplotlib biopython pandas seaborn numpy pysam logomaker
 ```
 ### **Option 2:** Using conda **(recommended)**
 ```
 conda create -n trapo-seq-env python=3.8 -y
 conda activate trapo-seq-env
-pip install matplotlib biopython pandas seaborn numpy pysam
+pip install matplotlib biopython pandas seaborn numpy pysam logomaker
 ```
 
 **External programs**: for installation please visit the links below, each can have different procedures:
@@ -478,6 +478,7 @@ This software in under [MIT License](https://github.com/recepcanaltinbag/trapo-s
   - seaborn
   - biopython
   - numpy
+  - logomaker
 - in_del_plot
   - matplotlib
   - pysam

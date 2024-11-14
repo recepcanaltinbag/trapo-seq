@@ -88,47 +88,53 @@ echo -e "\ncreated by Recep Can Altınbağ \n" >> "$TESTLOG"
 
 python trapo-seq.py --version >> "$TESTLOG" 2>&1
 
+
+# Function to handle each step
+run_step() {
+    step_info="$1"
+    out_info="$2"
+    command_to_run="$3"
+    echo -n "$step_message"
+    
+    # Execute command, redirect stdout to the log, and keep stderr in the console
+    { 
+        echo "$(date) - $step_info"
+        $command_to_run
+    } >> "$TESTLOG" 2>&1 || {
+        echo -e "\033[0;31mError occurred in: $step_info\033[0m"
+        echo -e "\033[0;31mPlease look the $TESTLOG file for information to debug\033[0m\n"
+        #tail -n 20 "$TESTLOG"  # Print last 20 lines of the log to help debug
+        return 1  # Return error status
+    }
+    
+    print_step "$step_info" 1 "$out_info"
+    return 0  # Success
+}
+
 echo -e "\n Input: test-data/*/*_raw.fastq \n"
 
-print_step "(1/9) Histogram" 1 "test-data/barcode01/read_len_hist.pdf"
-python trapo-seq.py read_histogram -f test-data/barcode01/barcode01_raw.fastq -o test-data/barcode01/read_len_hist >> "$TESTLOG" 2>&1
 
-print_step "(2/9) Filter" 1 "test-data/barcode01/barcode01.fastq"
-python trapo-seq.py filter -f test-data/barcode01/barcode01_raw.fastq -o test-data/barcode01/barcode01.fastq -l 2000 >> "$TESTLOG" 2>&1
+# run step <info> <output> <command> || exit 1
 
-print_step "(3/9) Map" 1 "test-data/*/03.*.bam"
-python trapo-seq.py map -d test-data -p test-data/plasmid.fasta -g test-data/genome.fasta --force >> "$TESTLOG" 2>&1
-
-print_step "(4/9) Insert Finder" 1 "test-data/*/*insertion_from_bam.tab"
-python trapo-seq.py insert_finder_batch -d test-data >> "$TESTLOG" 2>&1
-
-print_step "(5/9) Annotation of Insertions" 1 "test-data/*/*best_alignment.tab"
-python trapo-seq.py blast_annot_batch -d test-data -g  test-data/genome.fasta --is_fasta test-data/IS_curated.fasta --threads 4 >> "$TESTLOG" 2>&1
-
-print_step "(6/9) Stats" 1 "test-data/is_stats.rcp"
-python trapo-seq.py is_stat -d test-data -o test-data/is_stats.rcp >> "$TESTLOG" 2>&1
-
-print_step "(7/9) Heatmap" 1 "test-data/heatmap.pdf"
-python trapo-seq.py heatmap -r test-data/is_stats.rcp -o test-data/heatmap.pdf -t test-data/heatmap.tsv >> "$TESTLOG" 2>&1
-
-print_step "(8/9) DR Finder" 1 "test-data/insertions/*.csv"
-python trapo-seq.py dr_finder -d test-data -p test-data/plasmid.fasta >> "$TESTLOG" 2>&1
-
-print_step "(9/9) DR Logo" 1 "test-data/dr_logos/*.pdf"
-python trapo-seq.py dr_logo -d data/insertions -p test-data/plasmid.fasta -o test-data/dr_logos >> "$TESTLOG" 2>&1
+run_step "(1/9) Histogram" "test-data/barcode01/read_len_hist.pdf" "python trapo-seq.py read_histogram -f test-data/barcode01/barcode01_raw.fastq -o test-data/barcode01/read_len_hist" || exit 1
+run_step "(2/9) Filter" "test-data/barcode01/barcode01.fastq" "python trapo-seq.py filter -f test-data/barcode01/barcode01_raw.fastq -o test-data/barcode01/barcode01.fastq -l 2000" || exit 1
+run_step "(3/9) Map" "test-data/*/03.*.bam" "python trapo-seq.py map -d test-data -p test-data/plasmid.fasta -g test-data/genome.fasta --force" || exit 1
+run_step "(4/9) Insert Finder" "test-data/*/*insertion_from_bam.tab" "python trapo-seq.py insert_finder_batch -d test-data" || exit 1
+run_step "(5/9) Annotation of Insertions" "test-data/*/*best_alignment.tab" "python trapo-seq.py blast_annot_batch -d test-data -g  test-data/genome.fasta --is_fasta test-data/IS_curated.fasta --threads 4" || exit 1
+run_step "(6/9) Stats" "test-data/is_stats.rcp" "python trapo-seq.py is_stat -d test-data -o test-data/is_stats.rcp" || exit 1
+run_step "(7/9) Heatmap" "test-data/heatmap.pdf" "python trapo-seq.py heatmap -r test-data/is_stats.rcp -o test-data/heatmap.pdf -t test-data/heatmap.tsv" || exit 1
+run_step "(8/9) DR Finder" "test-data/insertions/*.csv" "python trapo-seq.py dr_finder -d test-data -p test-data/plasmid.fasta" || exit 1
+run_step "(9/9) DR Logo" "test-data/dr_logos/*.pdf" "python trapo-seq.py dr_logo -d test-data/insertions -p test-data/plasmid.fasta -o test-data/dr_logos" || exit 1
 
 echo -e "\n Optional Steps: \n"
 
-print_step "(1/3) Kde Plots" 1 "test-data/barcode01/kde_plot.pdf"
-python trapo-seq.py kde_mobile -b test-data/barcode01/03_sorted_mapped_to_plasmid.bam -o kde_plot >> "$TESTLOG" 2>&1
-
-print_step "(2/3) In-del Plot" 1 "test-data/barcode01/in_del_plot.pdf"
-python trapo-seq.py kde_mobile -i test-data/barcode01/insertion_from_bam.tab -b test-data/barcode01/03_sorted_mapped_to_plasmid.bam -o kde_plot >> "$TESTLOG" 2>&1
-
-print_step "(3/3) Map Dist Plot" 1 "test-data/barcode01/map_dist.pdf"
-python trapo-seq.py map_dist -b test-data/barcode01/03_sorted_mapped_to_plasmid.bam -o map_dist >> "$TESTLOG" 2>&1
-
+run_step "(1/3) Kde Plots" "test-data/barcode01/kde_plot.pdf" "python trapo-seq.py kde_mobile -b test-data/barcode01/03_sorted_mapped_to_plasmid.bam -o kde_plot" || exit 1
+run_step "(2/3) In-del Plot" "test-data/barcode01/in_del_plot.pdf" "python trapo-seq.py in_del_plot -i test-data/barcode01/insertion_from_bam.tab -b test-data/barcode01/03_sorted_mapped_to_plasmid.bam -o in_del_plot" || exit 1
+run_step "(3/3) Map Dist Plot" "test-data/barcode01/map_dist.pdf" "python trapo-seq.py map_dist -b test-data/barcode01/03_sorted_mapped_to_plasmid.bam -o map_dist" || exit 1
 
 # Additional checks or commands
 echo ""
-echo "Tests completed."
+echo "Tests completed.\n\n"
+
+
+
