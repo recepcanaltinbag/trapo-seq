@@ -93,6 +93,12 @@ conda activate trapo-seq-env
 python trapo-seq.py -h
 ```
 
+Test (It will use the test input under (/test_data/*)):
+```
+python trapo-seq.py --test
+```
+
+
 
 # Usage
 
