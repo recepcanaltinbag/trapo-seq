@@ -47,6 +47,7 @@
 
 ## Requirements
 **For all modules:**
+- [Linux]()
 - [Python]() (>v3.5) (For all modules)
 
 **Libraries:**
@@ -329,7 +330,7 @@ Example output:
 
 ![example_heatmap](/images/example_heatmap.png)
 **Figure 2:** Distribution of transposons in different conditions (barcodes).
-**Hint**: You can the barcode order in .rcp file to change the order in the heatmap.
+**Hint**: You can order the barcodes in .rcp file to change the order in the heatmap.
 
 ## Insertion Coordinates
 

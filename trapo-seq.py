@@ -61,7 +61,6 @@ def main():
     insert_finder_batch_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Folder of folders including bam files")
     insert_finder_batch_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
 
-
     blast_annot_parser = subparsers.add_parser("blast_annot", help="Annotation with Blast")
     blast_annot_parser.add_argument("-i", "--ins_bam", type=str, required=True, help="Path of insertions from bam tabular file")
     blast_annot_parser.add_argument("-m", "--mapped_fasta", type=str, required=True, help="path of mapped reads in fasta format")
@@ -87,8 +86,6 @@ def main():
     blast_annot_batch_parser.add_argument("--no_temp", action="store_false", help="To delete temp folder, add this")
     blast_annot_batch_parser.add_argument("--partial_threshold", type=int, default=80, help="For big insertions, if it has lower coverage than this value (and partial_len is used with this value), eliminate. Value: 0-100, default:80")
     blast_annot_batch_parser.add_argument("--partial_len", type=int, default=8000, help="For big insertions, if it is higher than this value, elimiation will be based on partial threshold, It is effective if there is multiple IS and TNs together. default:8000")
-
-
 
     is_stat_parser = subparsers.add_parser("is_stat", help="Stats of ISes and Tn's")
     is_stat_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Path of data folder")
@@ -124,7 +121,6 @@ def main():
     kde_mobile_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     kde_mobile_parser.add_argument("--plasmid_threshold", type=int, default=2000, help="Plasmid len threshold, if the alignment len is lower than this disregard")
 
-
     map_dist_parser = subparsers.add_parser("map_dist", help="Plotting dist, to anaylze jumping DNA coordinates both genome and plasmid")
     map_dist_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
     map_dist_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
@@ -150,13 +146,14 @@ def main():
             else:
                 print("Histograms...")
                 plot_histogram(args.fastq, args.output)
+        
         #B_FILTER
         elif args.command == "filter":
             from src.b_filtering_based_on_len import filter_fastq_by_length
             print(f"Filter process, Input: {args.fastq}, Output: {args.output}, Filter Len: {args.length}")
             filter_fastq_by_length(args.fastq, args.output, args.length)
             print('Filter process was ended')          
-        #
+        
         #C_ALIGNMENT
         elif args.command == "map":
             os.chmod("scripts/01_data_prep_from_py.sh", 0o755)
@@ -177,13 +174,12 @@ def main():
             print(f"\n[BATCH] Mapping process\nInput BAM: {args.input_dir}, \nThreshold: {args.threshold}")
             main_insert_finder_from_bam_batch(args.input_dir, args.threshold)
 
-
-
         #G_BLAST_THE_INSERTS_
         elif args.command == "blast_annot":
             from src.g_blast_annot import main_annot
             print(f"\nBlasting to annotate insertions..\n")
             main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
+        
         #G_BLAST_ANNOT_BATCH
         elif args.command == "blast_annot_batch":
             from src.g_blast_annot_batch import main_annot_batch
@@ -192,8 +188,6 @@ def main():
             if args.is_fasta == None:
                 the_is_fasta = 'src/dummy_is_file.fasta'
             main_annot_batch(args.input_dir, args.genome_fasta, args.is_fasta, args.temp,  args.threshold, args.threads, args.debug, args.no_temp,  args.partial_threshold, args.partial_len)
-
-
 
         #H_IS_Stats
         elif args.command == "is_stat":
@@ -224,17 +218,20 @@ def main():
             from src.f_in_del_plot import main_in_del_plot
             print("\nPlotting indels...\n")
             main_in_del_plot(args.ins_bam, args.bam, args.output, args.in_threshold, args.del_threshold)
+        
         #D_KDE
         elif args.command == "kde_mobile":
             from src.d_kde_mobile import main_kde_mobile
             print("\nPlotting kdes of mobile bpairs of genome...\n")
             main_kde_mobile(args.bam, args.output, args.plasmid_threshold)
+        
         #C_MAP_DIST
         elif args.command == "map_dist":
             from src.c_map_dist import main_map_dist
             print("\nPlotting plasmid and genome read distributions...\n")
             main_map_dist(args.bam, args.output)
 
+        #TEST
         elif args.command == "test":
             print('Starting test!\n')
             os.chmod("test_script.sh", 0o755)
