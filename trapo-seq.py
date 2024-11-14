@@ -226,6 +226,8 @@ def main():
             print("\nPlotting plasmid and genome read distributions...\n")
             main_map_dist(args.bam, args.output)
 
+        elif args.command == "test":
+            
 
         else:
             print("Please enter a command.")
