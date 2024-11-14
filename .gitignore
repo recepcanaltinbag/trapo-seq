@@ -3,3 +3,5 @@
 /.vscode/
 cheat_sheet.txt
 cheat_sheet.sh
+test-data/*
+!test-data/barcode01/barcode01.fastq
