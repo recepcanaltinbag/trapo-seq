@@ -28,7 +28,7 @@
   - [Mutation and Variant Analysis](#mutation-and-variant-analysis)
   - [Map Distribution](#map-distribution)
 - [FAQ](#faq)
-  - [How Can I Cite trapo-seq?](#how-can-i-cite-trapo-seq?)
+  - [How Can I Cite?](#how-can-i-cite?)
 - [License](#license)
 - [Flowchart](#flowchart)
 
