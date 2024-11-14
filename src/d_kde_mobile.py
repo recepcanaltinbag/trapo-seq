@@ -186,16 +186,41 @@ def read_unique_alignment_genome(bam_file, genome_name, overlap_threshold=80.0):
     return reads
 
 
+def merge_intervals(intervals):
+    """Verilen interval listesinde örtüşenleri birleştirir."""
+    if not intervals:
+        return []
+    
+    # Intervals'ı start'a göre sıralıyoruz
+    intervals.sort(key=lambda x: x[1])
+    
+    # İlk bölgeyi başlat
+    merged = [intervals[0]]
+    
+    for current in intervals[1:]:
+        prev_genome, prev_start, prev_end = merged[-1]
+        _, curr_start, curr_end = current
+        
+        # Eğer mevcut bölge öncekiyle örtüşüyorsa
+        if curr_start <= prev_end:
+            # Örtüşen bölgeleri birleştir
+            merged[-1] = (prev_genome, prev_start, max(prev_end, curr_end))
+        else:
+            # Eğer örtüşmüyorsa, yeni bir bölge ekle
+            merged.append(current)
+    
+    return merged
+
 def analyze_basepair_distribution(plasmid_reads, genome_reads):
     read_distribution = defaultdict(lambda: {"plasmid": 0, "genome": 0})
     
     for read_name, alignments in plasmid_reads.items():
-        for genome_name, start, end in alignments:
-            read_distribution[read_name]["plasmid"] += (end - start)
-    
+        merged_plasmid_alignments = merge_intervals(alignments)
+        read_distribution[read_name]["plasmid"] += sum(end - start for _, start, end in merged_plasmid_alignments)
+
     for read_name, alignments in genome_reads.items():
-        for genome_name, start, end in alignments:
-            read_distribution[read_name]["genome"] += (end - start)
+        merged_genome_alignments = merge_intervals(alignments)
+        read_distribution[read_name]["genome"] += sum(end - start for _, start, end in merged_genome_alignments)
     
     return read_distribution
 
