@@ -4,7 +4,8 @@
 cheat_sheet.txt
 cheat_sheet.sh
 test-data/*
-!test-data/barcode01/barcode01.fastq
+test-data/barcode01/*
+!test-data/barcode01/barcode01_raw.fastq
 !test-data/genome.fasta
 !test-data/plasmid.fasta
 !test-data/Manually_curated_ISes.fasta

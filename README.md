@@ -431,7 +431,7 @@ python trapo-seq.py map_dist -b data/barcode01/03_sorted_mapped_to_plasmid.bam -
 
 
 ![example_map_dist](/images/example_map_dist.png)
-**Figure 4:** Read distributions on plasmid and genome. For the plasmid; around 3000 there is a certain peak which is actually caused by restriction enzyme, and also peaks around 4000 which is caused by transpositions. For the genome; around ~2.4 Mbp and ~6.8 Mbp, sections are very mobile. This output can not be used for exact locations, but can give an idea about general trend and can be helpful in undesired conditions.
+**Figure 5:** Read distributions on plasmid and genome. For the plasmid; around 3000 there is a certain peak which is actually caused by restriction enzyme, and also peaks around 4000 which is caused by transpositions. For the genome; around ~2.4 Mbp and ~6.8 Mbp, sections are very mobile. This output can not be used for exact locations, but can give an idea about general trend and can be helpful in undesired conditions.
 
 # FAQ
 
