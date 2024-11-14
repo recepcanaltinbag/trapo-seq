@@ -64,7 +64,9 @@ pip install matplotlib biopython pandas seaborn numpy pysam
 ```
 ### **Option 2:** Using conda **(recommended)**
 ```
-conda create -n trapo-seq-env python=3.8 matplotlib biopython pandas seaborn numpy pysam -y
+conda create -n trapo-seq-env python=3.8 -y
+conda activate trapo-seq-env
+pip install matplotlib biopython pandas seaborn numpy pysam
 ```
 
 **External programs**: for installation please visit the links below, each can have different procedures:
@@ -74,7 +76,16 @@ conda create -n trapo-seq-env python=3.8 matplotlib biopython pandas seaborn num
 - [makeblastdb](https://www.ncbi.nlm.nih.gov/books/NBK569861/) (blast_annot_batch)
 - [MAFFT](http://mafft.cbrc.jp/alignment/software/) (dr_logo)
 
-After installation. Run the script below, If you don't see any errors in the output, all programs have been successfully installed. Don't forget to add them to the PATH.
+After installation. Run the **test** module below, If you don't see any errors in the output, all programs have been successfully installed. Don't forget to add them to the PATH. 
+
+**Test** (It will use the test input under (/test_data/*)):
+```
+conda activate trapo-seq-env
+python trapo-seq.py --test
+```
+
+
+Also, you can test the installations one by one like:
 
 ```
 minimap2 --version
@@ -83,7 +94,6 @@ blastn -version
 makeblastdb -version
 mafft --version
 python --version
-
 ```
 
 Quick start:
@@ -93,10 +103,6 @@ conda activate trapo-seq-env
 python trapo-seq.py -h
 ```
 
-Test (It will use the test input under (/test_data/*)):
-```
-python trapo-seq.py --test
-```
 
 
 
@@ -331,6 +337,12 @@ The output (insertion_from_bam.tab) from [Annotation of Insertions](#annotation-
 ## DR Finder
 
 Transposition event can create **direct repeats (DR)**. Direct repeats in transposons are short, identical sequences of DNA that flank the insertion site of a transposon. These repeats are generated during the transposition process (**not generated in all transposition events!**), leaving overhangs that are subsequently filled in, creating duplicated sequences on either side of the transposon. Blasting reference sequence to the reads **can reveal overlapping regions** near the insertion point (**ref_pos**):  **The possible DRs.**
+
+```
+python trapo-seq.py dr_finder -d data -p data/plasmid.fasta
+```
+- **-d** directory which barcode folders having tab files (best_alignment.tab)
+- **-p** trap plasmid sequence (.fasta)
 
 An example output of DR Finder module (insertions.csv):
 

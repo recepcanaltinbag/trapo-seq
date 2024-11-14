@@ -1,5 +1,6 @@
 import argparse
-
+import subprocess
+import os
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -24,6 +25,13 @@ def main():
     # Main Parser
     parser = argparse.ArgumentParser(description="Traposome Sequencing Pipeline")
     parser.add_argument('--all-help', action='store_true', help="Show complete help message")
+    parser.add_argument(
+        '--version',
+        action='version',
+        version='trapo-seq 1.0',  # Replace '1.0' with your program's version
+        help="Show program's version number and exit"
+    )
+
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -121,7 +129,7 @@ def main():
     map_dist_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
     map_dist_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
 
-
+    test_parser = subparsers.add_parser("test", help="to test the pipeline")
 
     # Arguments
     args = parser.parse_args()
@@ -151,6 +159,7 @@ def main():
         #
         #C_ALIGNMENT
         elif args.command == "map":
+            os.chmod("scripts/01_data_prep_from_py.sh", 0o755)
             from src.a_data_mapping import main_mapping
             print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
             main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
@@ -227,7 +236,10 @@ def main():
             main_map_dist(args.bam, args.output)
 
         elif args.command == "test":
-            
+            print('Starting test!\n')
+            os.chmod("test_script.sh", 0o755)
+            subprocess.run(["./test_script.sh"], check=True)
+
 
         else:
             print("Please enter a command.")

@@ -76,7 +76,7 @@ def plot_histogram(fastq_file, output):
     plt.savefig(f"{output}.pdf")
     print(f'Figure saved as {output}')
     # Show the plot
-    plt.show()
+    #plt.show()
 
 #----------------------------------------------------
 # EXAMPLE USAGE -------------------------------------

@@ -55,7 +55,7 @@ def plot_heatmaps(data_high, data_low, output, vmax_low):
     
     plt.tight_layout()
     plt.savefig(output)  # Grafik dosyaya kaydedilir
-    plt.show()
+    #plt.show()
 
 
 
