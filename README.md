@@ -76,7 +76,7 @@ pip install matplotlib biopython pandas seaborn numpy pysam logomaker
 - [makeblastdb](https://www.ncbi.nlm.nih.gov/books/NBK569861/) (blast_annot_batch)
 - [MAFFT](http://mafft.cbrc.jp/alignment/software/) (dr_logo)
 
-After installation. Run the **test** module below, If you don't see any errors in the output, all programs have been successfully installed. Don't forget to add them to the PATH. 
+After installation. Run the **test** module below, If you don't see any errors in the output, all programs have been successfully installed. trapo-seq expects external programs to be available in **$PATH**.
 
 **Test** (It will use the test input under (/test_data/*)):
 ```
