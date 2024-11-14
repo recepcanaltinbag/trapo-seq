@@ -2,6 +2,10 @@
 
 ### Traposome Sequencing Pipeline for Long Read Technologies
 
+**trapo-seq** is a bacterial traposome sequencing pipeline for long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can resolve mobile elements (transposons and insertion sequences are repetitive sequences) as a whole, even just one read can reveal the complete sequence of the mobile elements that have trapped by the plasmid (or other genetic elements). Also, the assembly process is not a must unlike short read technologies. This also helps to obtain high throughput traposome data to compare effects of different conditions on transposition. 
+
+
+**trapo-seq** was initially developed for trap plasmids, but it can be used for other genetic elements if there are insertions of mobile elements on them.
 
 - [Installation](#installation)
 - [Usage](#usage)
@@ -28,11 +32,6 @@
 - [License](#license)
 - [Flowchart](#flowchart)
 
-
-**trapo-seq** is a bacterial traposome sequencing pipeline for long read technologies. The biggest advantage of the long read technology for traposome analysis is that it can resolve mobile elements (transposons and insertion sequences are repetitive sequences) as a whole, even just one read can reveal the complete sequence of the mobile elements that have trapped by the plasmid (or other genetic elements). Also, the assembly process is not a must unlike short read technologies. This also helps to obtain high throughput traposome data to compare effects of different conditions on transposition. 
-
-
-**trapo-seq** was initially developed for trap plasmids, but it can be used for other genetic elements if there are insertions of mobile elements on them.
 
 # Installation
 
