@@ -395,7 +395,7 @@ python trapo-seq.py map_dist -b data/barcode01/03_sorted_mapped_to_plasmid.bam -
 
 # FAQ
 
-## How Can I Cite trapo-seq?
+## How Can I Cite?
 
 Hopefully the paper will come soon :), for now, this github page. 
 
