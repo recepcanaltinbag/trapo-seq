@@ -27,6 +27,15 @@ bibliography: paper.bib
 
 # Main features
 
+Figures can be included like this:
+![Caption for example figure.\label{fig:example}](figure.png)
+and referenced from text using \autoref{fig:example}.
+`@author:2001`
+  `[@author:2001]`
+
+
+
+
 ## 
 
 # Alternatives
