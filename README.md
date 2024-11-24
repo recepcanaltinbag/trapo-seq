@@ -72,7 +72,7 @@ After installation, run the **test** module below, If you don't see any errors i
 **Test** (It will use the test data as input under (/test_data/*) and creates outputs in same folder):
 ```
 conda activate trapo-seq-env
-python trapo-seq.py --test
+python trapo-seq.py test
 ```
 
 # Usage
