@@ -74,6 +74,11 @@ def plot_read_distribution(plasmid_reads, genome_reads, plasmid_length, genome_l
                 if i < genome_length:
                     genome_counts[i] += 1
 
+    
+    #main_polar(genome_counts)
+    #input()
+
+
     fig, ax = plt.subplots(2, 1, figsize=(10, 8))
     ax[0].plot(range(plasmid_length), plasmid_counts, label="Plasmid")
     ax[0].set_title("Read Distribution on Plasmid")
@@ -177,5 +182,19 @@ def main_map_dist(plasmid_bam, output_p):
     genome_reads = read_alignment(genome_bam)
 
     plot_read_distribution(plasmid_reads, genome_reads, plasmid_length, genome_length, output)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
