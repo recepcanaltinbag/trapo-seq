@@ -174,7 +174,7 @@ def main_map_dist(plasmid_bam, output_p):
     plasmid_length = get_reference_lengths(plasmid_bam)[0]  
     genome_length = get_reference_lengths(genome_bam)[0]
 
-    print('\n\nDistribution of reads\n')
+    print('\n\nDistribution of reads \n')
     print(f'Len of plasmid: {plasmid_length}')
     print(f'Len of genome: {genome_length}\n----')
 
