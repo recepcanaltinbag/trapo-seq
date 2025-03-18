@@ -116,7 +116,7 @@ It is essential to filter shorter reads because they are not helpful most of the
 - If you want to filter only length-based (you do not need an external program like [FiltLong](https://github.com/rrwick/Filtlong)) you can use **read_histogram** module:
 
 ```
-python trapo-seq.py filter -f data/barcode01/barcode01_raw.fastq -o data/barcode01/read_len_hist -l 2000
+python trapo-seq.py filter -f data/barcode01/barcode01_raw.fastq -o data/barcode01/barcode01_filtered -l 2000
 ```
 - **-f** fastq file path
 - **-o** output file path
