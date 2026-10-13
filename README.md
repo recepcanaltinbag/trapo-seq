@@ -216,6 +216,30 @@ GCTGATGACAAD...
 ```
 Then, it is ready for the next module.
 
+### Building a reference element database (optional)
+
+`scripts/build_element_db.py` merges third-party element databases you have downloaded
+yourself (ISfinder `IS.fna` + taxonomy TSV, TnCentral/INTEGRALL and PICOTA FASTAs) into one
+non-redundant FASTA in the `>Family_Name` format expected by `--is_fasta`. These databases are
+licensed: keep them and the outputs out of version control (the default folders `IS_Db/` and
+`IS_Db/trapo_db/` are git-ignored).
+
+```
+python scripts/build_element_db.py --src IS_Db/DBIS --out IS_Db/trapo_db
+python trapo-seq.py blast_annot_batch -d data -g data/genome.fasta --is_fasta IS_Db/trapo_db/elements.fasta --threads 12
+```
+
+- Families never contain `_` (ISfinder `IS200/IS605` becomes `IS200-IS605`); MITEs get the family `MITE`,
+  ISCRs `ISCR`, TnCentral transposons `Tn`, ISfinder Tn3-family transposons `Tn3`, integrons `Integron`,
+  INTEGRALL gene cassettes `Cassette`, multi-element TnCentral entries `Compound`; `--family_map` (name<TAB>family) overrides.
+- Identical and reverse-complement-identical sequences are merged (best-annotated record kept, others listed as aliases);
+  malformed records (headers glued into sequence lines) are repaired and reported.
+- `--types` selects what goes into `elements.fasta` (default `IS,MITE,ISCR`; `all` adds transposons, integrons, cassettes and
+  compound elements). Large elements are left out by default because an IS-sized insert is covered equally well by every
+  Tn/integron that carries that IS, so its label would depend on BLAST tie order.
+- Outputs: `elements.fasta`, `elements_all.fasta` (every type), `elements_is_only.fasta` (ISfinder elements only),
+  `elements.tsv` (metadata, aliases, notes) and `summary.txt`.
+
 ## Annotation of Insertions
 
 In this step, the extracted insertions will be searched in the genome and manually curated IS FASTA file, and the results will be presented in a tabular format. Also, the output of this module can be used to label transposons. 

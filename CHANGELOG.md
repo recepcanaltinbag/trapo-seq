@@ -27,6 +27,10 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   cluster each, boundaries exact for 53/59 and within 2 bp for all, TIR found
   for 58/59, genomic DR exact for 53/59; random genome intervals give 1.1 %
   `mobile_element_candidate`.
+- `scripts/build_element_db.py`: builds a non-redundant `--is_fasta` database
+  from locally downloaded ISfinder, TnCentral/INTEGRALL and PICOTA files
+  (repairs malformed records, merges identical/reverse-complement sequences,
+  maps families to the `Family_Name` header format, selects element types).
 - **Plasmid–genome shared segments** (issue #5): `map` detects them
   (`plasmid_genome_homology.tsv`, warning for segments ≥ the insertion
   threshold); the transposition rate in `08_mapping_stats.txt` no longer counts
