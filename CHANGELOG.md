@@ -27,6 +27,19 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   cluster each, boundaries exact for 53/59 and within 2 bp for all, TIR found
   for 58/59, genomic DR exact for 53/59; random genome intervals give 1.1 %
   `mobile_element_candidate`.
+- **Plasmid–genome shared segments** (issue #5): `map` detects them
+  (`plasmid_genome_homology.tsv`, warning for segments ≥ the insertion
+  threshold); the transposition rate in `08_mapping_stats.txt` no longer counts
+  reads that touch the genome only through a shared segment (the bundled
+  pMAT1 / E. coli K-12 pair shares 230 bp, which inflated the rate from ~0.27
+  to 0.99; uncorrected values are kept as extra lines); insertion calls whose
+  flanks lie in a shared segment and whose read continues collinearly into the
+  genome are flagged (`insertion_from_bam_homology_flags.tsv`) and relabelled
+  *Contamination* (`--homology_action keep` only flags). `best_alignment.tab`
+  gains a trailing `Homology` column. Simulated 1.5–3 kb shared segments:
+  all 144–173 homology-driven false calls removed, no true insertion flagged.
+  Simulator `--homology_len` plants shared segments; `evaluate.py` reports a
+  homology section.
 - **`Unannotated` label**: inserts with plasmid on both sides but no IS or
   genome hit are no longer called *Contamination*. *Contamination* is kept for
   read-end clips that do not resemble any both-flanked insert of the sample.

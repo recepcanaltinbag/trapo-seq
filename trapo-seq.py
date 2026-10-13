@@ -59,6 +59,9 @@ def main():
     map_parser.add_argument("-g", "--genome", type=str, required=True, help="path of genome in fasta format")
     map_parser.add_argument("-f", "--force", action="store_true", help="Force overwrite if the file exists")
     map_parser.add_argument("-t", "--threads", type=int, default=4, help="Threads for minimap2 and samtools, default: 4")
+    map_parser.add_argument("--homology_min_len", type=int, default=100, help="Min length (bp) of plasmid-genome shared segments to detect, default: 100")
+    map_parser.add_argument("--homology_min_identity", type=float, default=0.8, help="Min identity of shared segments, default: 0.8")
+    map_parser.add_argument("--insertion_threshold", type=int, default=500, help="Insertion size threshold used by insert_finder (-t); shared segments at least this long trigger a warning, default: 500")
     map_parser.add_argument("--linear", action="store_true", help="Map to the plasmid as a linear sequence only (old behaviour); by default the circular plasmid is handled")
 
     insert_finder_parser = subparsers.add_parser("insert_finder", help="finding inserts from .bam file")
@@ -80,6 +83,7 @@ def main():
     blast_annot_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
+    blast_annot_parser.add_argument("--homology_action", choices=["relabel", "keep"], default="relabel", help="Calls explained by plasmid-genome shared segments: relabel as Contamination (default) or keep the label and only flag them")
     blast_annot_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary BLAST files and databases (for debugging)")
     blast_annot_parser.add_argument("--evalue", type=float, default=1e-10, help="BLAST E-value cutoff for insert annotation, default: 1e-10")
     blast_annot_parser.add_argument("--blast_task", choices=["megablast", "dc-megablast", "blastn"], default="megablast", help="BLAST search mode; dc-megablast is more sensitive for divergent inserts, default: megablast")
@@ -94,6 +98,7 @@ def main():
     blast_annot_batch_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_batch_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_batch_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
+    blast_annot_batch_parser.add_argument("--homology_action", choices=["relabel", "keep"], default="relabel", help="Calls explained by plasmid-genome shared segments: relabel as Contamination (default) or keep the label and only flag them")
     blast_annot_batch_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary BLAST files and databases (for debugging)")
     blast_annot_batch_parser.add_argument("--evalue", type=float, default=1e-10, help="BLAST E-value cutoff for insert annotation, default: 1e-10")
     blast_annot_batch_parser.add_argument("--blast_task", choices=["megablast", "dc-megablast", "blastn"], default="megablast", help="BLAST search mode; dc-megablast is more sensitive for divergent inserts, default: megablast")
@@ -196,7 +201,9 @@ def main():
             from src.a_data_mapping import MappingError
             try:
                 main_mapping(args.input_dir, args.plasmid, args.genome, args.force, threads=args.threads,
-                             circular=not args.linear)
+                             circular=not args.linear, homology_min_len=args.homology_min_len,
+                             homology_min_identity=args.homology_min_identity,
+                             insertion_threshold=args.insertion_threshold)
             except (MappingError, FileNotFoundError) as err:
                 sys.exit(f"Mapping failed: {err}")
             print('Mapping process was ended')
@@ -220,7 +227,7 @@ def main():
             main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, is_fasta=args.is_fasta, temp_dir=args.temp,
                        output_csv=args.output, threshold=args.threshold, threads=args.threads, debug=args.debug,
                        keep_temp=args.keep_temp, partial_threshold=args.partial_threshold, partial_len=args.partial_len,
-                       evalue=args.evalue, task=args.blast_task)
+                       evalue=args.evalue, task=args.blast_task, homology_action=args.homology_action)
         
         #G_BLAST_ANNOT_BATCH
         elif args.command == "blast_annot_batch":
@@ -229,7 +236,8 @@ def main():
             main_annot_batch(args.input_dir, args.genome_fasta, is_fasta=args.is_fasta, temp_dir=args.temp,
                              threshold=args.threshold, threads=args.threads, debug=args.debug,
                              keep_temp=args.keep_temp, partial_threshold=args.partial_threshold,
-                             partial_len=args.partial_len, evalue=args.evalue, task=args.blast_task)
+                             partial_len=args.partial_len, evalue=args.evalue, task=args.blast_task,
+                             homology_action=args.homology_action)
 
         #H_IS_Stats
         elif args.command == "is_stat":

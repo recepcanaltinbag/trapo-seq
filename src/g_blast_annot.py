@@ -34,6 +34,19 @@
 # insertion). insertion_from_bam.tab carries the reference position of one
 # flank only; a column with both flank positions/strands would allow it.
 #
+# PLASMID-GENOME HOMOLOGY (GitHub issue #5): insert_finder writes
+# <tab stem>_homology_flags.tsv next to the tab file when the plasmid and the
+# genome share segments (src/plasmid_genome_homology.py). A flagged call is a
+# genomic read that only looks plasmid-flanked: every plasmid flank of its
+# insert ends inside a shared segment and the read's genome alignment runs
+# contiguously across the flank/insert junction. By default
+# (homology_action="relabel") a flagged call is labelled Contamination (it is
+# genomic DNA, not a transposition), so stats, dr_finder and novel_elements do
+# not count it; the column Homology keeps the classification it would have had
+# ("shared_segment:<Note>"); "-" = not flagged / not checked.
+# homology_action="keep" only fills the column. Flags are matched by Query ID
+# and ignored if the flags file is older than the tab file.
+#
 # NEEDS: blastn and makeblastdb in PATH, Biopython.
 #
 # INPUT: TAB file written by e_insert_finder_from_bam:
@@ -41,7 +54,7 @@
 #
 # OUTPUT: TAB file, exactly one row per insertion (Query ID = {read_id}_{start}_{end}):
 #   Query ID, Subject ID, Identity (%), Score, E-value, Query Start, Query End,
-#   Subject Start, Subject End, Note, Explained, ref_pos, is_Reverse
+#   Subject Start, Subject End, Note, Explained, ref_pos, is_Reverse, Homology
 #   - Subject ID is the first token of the database FASTA header.
 #   - Identity/Score/E-value/coordinates describe the best (highest bitscore)
 #     HSP of the chosen subject; Score is the raw BLAST score.
@@ -61,12 +74,16 @@ import tempfile
 
 from Bio import SeqIO
 
+from . import plasmid_genome_homology as homology
+
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 DUMMY_IS_FASTA = os.path.join(MODULE_DIR, "dummy_is_file.fasta")
 
 DEFAULT_EVALUE = 1e-10
 
 NOTES = ("IS_DB", "Genome", "Unannotated", "Contamination")
+HOMOLOGY_ACTIONS = ("relabel", "keep")
+HOMOLOGY_PREFIX = "shared_segment:"
 
 # An SC insert starting/ending within this many bp of a read end is a read-end
 # clip (e_insert_finder reports such gaps starting at 0 / ending at the read length).
@@ -74,7 +91,7 @@ READ_END_TOLERANCE = 20
 
 OUTPUT_COLUMNS = ["Query ID", "Subject ID", "Identity (%)", "Score", "E-value",
                   "Query Start", "Query End", "Subject Start", "Subject End",
-                  "Note", "Explained", "ref_pos", "is_Reverse"]
+                  "Note", "Explained", "ref_pos", "is_Reverse", "Homology"]
 
 # Tabular BLAST columns; stitle must stay last (it may contain spaces).
 BLAST_COLUMNS = ["qseqid", "sseqid", "pident", "length", "qstart", "qend",
@@ -339,14 +356,14 @@ def insert_flanked(insert_type, query_start, query_end, read_len,
     return query_start > tolerance and query_end < read_len - tolerance
 
 
-def _format_row(query_id, note, hsp, explained, ref_pos, is_reverse):
+def _format_row(query_id, note, hsp, explained, ref_pos, is_reverse, homology_value="-"):
     if hsp is None:
         vals = [query_id, "no blast hit", "N/A", "N/A", "N/A", 0, 0, 0, 0]
     else:
         vals = [query_id, hsp["subject"], hsp["pident"], hsp["score"],
                 hsp["evalue"], hsp["qstart"], hsp["qend"], hsp["sstart"],
                 hsp["send"]]
-    vals += [note, round(explained, 2), ref_pos, is_reverse]
+    vals += [note, round(explained, 2), ref_pos, is_reverse, homology_value]
     return "\t".join(str(v) for v in vals) + "\n"
 
 
@@ -398,6 +415,25 @@ def subject_coverage(hsps):
     return best
 
 
+#------------------------------------------------------------- homology -----
+
+def load_homology_flags(tab_file, homology_flags="auto"):
+    """Query IDs flagged as plasmid-genome homology artefacts (empty set if
+    there is no usable flags file)."""
+    if homology_flags is None:
+        return set()
+    path = homology.flags_path_for(tab_file) if homology_flags == "auto" else homology_flags
+    if not os.path.isfile(path):
+        if homology_flags != "auto":
+            raise FileNotFoundError(f"blast_annot: homology flags file not found: {path}")
+        return set()
+    if os.path.getmtime(path) < os.path.getmtime(tab_file):
+        print(f"Warning: {path} is older than {tab_file}; homology flags ignored "
+              f"(re-run insert_finder)", file=sys.stderr)
+        return set()
+    return homology.read_flagged_ids(path)
+
+
 #----------------------------------------------------------------- main -----
 
 def _remove(paths):
@@ -415,9 +451,14 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
                temp_dir="temp", output_csv="best_alignment.tab", threshold=70,
                threads=2, debug=False, keep_temp=False, partial_threshold=80,
                partial_len=8000, evalue=DEFAULT_EVALUE, db_dir=None,
-               task="megablast"):
+               task="megablast", homology_flags="auto", homology_action="relabel"):
     """Annotate all insertions of one sample. Writes `output_csv` and returns
     a dict {Query ID: Note}.
+
+    homology_flags: flags table of plasmid-genome homology artefacts ("auto":
+    <tab stem>_homology_flags.tsv next to tab_file if present; None: off).
+    homology_action: "relabel" (flagged calls -> Contamination) or "keep"
+    (Note unchanged); both fill the Homology column (see PLASMID-GENOME HOMOLOGY).
 
     is_fasta=None uses src/dummy_is_file.fasta. BLAST DBs are built in
     `db_dir` (default: <temp_dir>/blastdb). Unless keep_temp, the files this
@@ -429,6 +470,9 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
                         ("genome FASTA", genom_fasta), ("IS FASTA", is_fasta)):
         if not os.path.isfile(path):
             raise FileNotFoundError(f"blast_annot: {label} not found: {path}")
+    if homology_action not in HOMOLOGY_ACTIONS:
+        raise ValueError(f"homology_action must be one of {HOMOLOGY_ACTIONS}, not {homology_action!r}")
+    flagged = load_homology_flags(tab_file, homology_flags)
     print(f'Settings: Threshold: {threshold}, Threads: {threads}, E-value: {evalue}, '
           f'Debugging: {debug}, Partial Threshold: {partial_threshold}, Partial Len: {partial_len}')
 
@@ -493,8 +537,9 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
     # Read-end clips without hit: rescued as Unannotated when they match a
     # both-flanked Unannotated insert of this sample (see CONTAMINATION RULE).
     rescued = set()
-    contam = [c[0] for c in classified if c[2] == "Contamination"]
-    anchors = [c[0] for c in classified if c[2] == "Unannotated"]
+    is_flagged = {c[0] for c in classified if c[1] in flagged}
+    contam = [c[0] for c in classified if c[2] == "Contamination" and c[0] not in is_flagged]
+    anchors = [c[0] for c in classified if c[2] == "Unannotated" and c[0] not in is_flagged]
     if contam and anchors:
         rescue_dir = os.path.join(temp_dir, f"{tag}_unannotated_db")
         created.append(rescue_dir)
@@ -502,15 +547,22 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
                                    evalue, threads, task)
     notes = {}
     rows = []
+    n_flagged = 0
     for qname, query_id, note, hsp, explained, ref_pos, is_reverse, qual in classified:
         if qname in rescued:
             note = "Unannotated"
+        homology_value = "-"
+        if qname in is_flagged:
+            n_flagged += 1
+            homology_value = HOMOLOGY_PREFIX + note
+            if homology_action == "relabel":
+                note = "Contamination"
         if debug:
             print(query_id, note, f"explained={explained:.2f}",
                   hsp["subject"] if hsp else "", f"quality={qual}",
                   "(read-end clip matching a flanked Unannotated insert)" if qname in rescued else "")
         notes[query_id] = note
-        rows.append(_format_row(query_id, note, hsp, explained, ref_pos, is_reverse))
+        rows.append(_format_row(query_id, note, hsp, explained, ref_pos, is_reverse, homology_value))
 
     out_dir = os.path.dirname(os.path.abspath(output_csv))
     os.makedirs(out_dir, exist_ok=True)
@@ -529,5 +581,10 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
     counts = {n: list(notes.values()).count(n) for n in NOTES}
     print(f"Classified: {counts}" + (f" ({len(rescued)} read-end clip(s) Unannotated by similarity "
                                       f"to flanked Unannotated inserts)" if rescued else ""))
+    if n_flagged:
+        print(f"Plasmid-genome homology: {n_flagged} call(s) are genomic reads that only look "
+              f"plasmid-flanked through a shared segment" +
+              (" and were labelled Contamination" if homology_action == "relabel" else
+               " (Note kept, see column Homology)"))
     print(f"Outputs {output_csv} were recorded.")
     return notes

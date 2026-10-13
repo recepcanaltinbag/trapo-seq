@@ -159,6 +159,15 @@ In this script, the reads are mapped to the plasmid and also the genome. Using t
 
 If genomic DNA contamination is to be examined, a careful approach should be taken because transposed plasmids carry portions of genomic DNA. If a read do not have any plasmid portion, the read can be labeled as a DNA contamination.
 
+### Plasmid–genome shared segments
+
+If the trap plasmid and the host genome share sequence (a resistance gene, a replicon fragment, an IS copy), `map` finds it first (minimap2 `-x asm20` of the plasmid against the genome, circular plasmid, every genome copy) and writes `data/plasmid_genome_homology.tsv` (`plasmid`, `plasmid_len`, `plasmid_start`, `plasmid_end` (0-based; > `plasmid_len` = crosses the origin), `genome_contig`, `genome_start`, `genome_end`, `strand`, `identity`, `length`). Segments of at least 100 bp and 80 % identity are listed; segments of at least the insertion threshold (500 bp) trigger a warning, because genomic DNA reads through them look like plasmid reads with an insertion. What the pipeline does about it:
+
+- **Mapping statistics.** A plasmid read is counted as genome-mapped only if some of its genome-aligned sequence is not aligned to the plasmid (otherwise every read covering the shared segment would count, and the transposition rate approaches 1). Genomic reads that reach the plasmid only through a shared segment are left out of `Plasmid` and `Both`. `08_mapping_stats.txt` also gives the uncorrected numbers.
+- **Insertion calls.** `insert_finder_batch` writes `insertion_from_bam_homology_flags.tsv`. A call is flagged when every plasmid flank of the insert ends inside a shared segment **and** the read's genome alignment runs straight across the flank/insert junction. In other words, the read is genome DNA that only looks plasmid-flanked. A real insertion into a shared segment is not flagged, because its insert is not next to that segment in the genome. `blast_annot(_batch)` labels flagged calls **Contamination** and writes the label they would otherwise have had in the `Homology` column (`shared_segment:<Note>`; `-` = not flagged). So `is_stats` (which reports `#Homology_flagged`) and `novel_elements` leave them out, and `dr_finder`/`dr_logo` put them under Contamination.
+
+Simulate the situation with `simulate/simulate_traposome.py --homology_len MIN MAX` (see its help). `simulate/evaluate.py` reports the false calls that come from shared segments, before and after flagging (section `homology`).
+
 During library prepation or in the post-analysis in sequencing protocol, different barcodes can get mixed or incorrect demultiplexing can happen (the amounts are expected to be low). This is also important to take into account before moving further especially if different strains or different plasmids are sequenced in same batch.
 
 You can also look the docs section [for taking extra info about sam file and CIGAR strings](/docs#understanding-cigar-string). If you want to analyse your data with different tools than minimap2, the insertion finding algorithm may need some adjustments. I tested it with [bwa-mem](https://github.com/lh3/bwa), and it is working fine but I do not know others.
@@ -239,7 +248,7 @@ Each insertion is classified once, so the table has **one row per insertion** an
 - **Unannotated**: no IS or genome hit, but the insert sits inside the plasmid: a CIGAR insertion (`IN` in insertion_from_bam.tab) or a soft-clipped stretch (`SC`) with plasmid alignments on both sides. These are candidate transposition events of an element missing from both the IS FASTA and the genome (characterise them with `novel_elements`);
 - **Contamination**: no hit and evidence of a non-transposition origin: an `SC` stretch at a read end (plasmid on one side only; typically a chimeric read, adapter or foreign DNA) that does not match any both-flanked Unannotated insert of the sample over at least `--threshold` % of the clip or of that insert (if it does, it is the same unknown element and stays **Unannotated**).
 
-Rows without a hit (Unannotated, Contamination) have Subject ID `no blast hit` and Explained 0.
+Rows without a hit (Unannotated, Contamination) have Subject ID `no blast hit` and Explained 0. A call flagged as a plasmid–genome homology artefact (see [Plasmid–genome shared segments](#plasmidgenome-shared-segments)) is labelled Contamination but keeps its BLAST hit, and the `Homology` column (last column) holds its original Note.
 
 The output of this module is a tabular file (*best_alignment.tab) in the format of:
 

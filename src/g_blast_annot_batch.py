@@ -24,7 +24,7 @@ def find_file_with_prefix(directory, prefix):
 def main_annot_batch(data_dir, genom_fasta, is_fasta=None, temp_dir=None,
                      threshold=70, threads=2, debug=False, keep_temp=False,
                      partial_threshold=80, partial_len=8000,
-                     evalue=DEFAULT_EVALUE, task="megablast"):
+                     evalue=DEFAULT_EVALUE, task="megablast", homology_action="relabel"):
     """Annotate every sample folder in data_dir. temp_dir defaults to
     <data_dir>/temp. Returns {sample: {Query ID: Note}}."""
     if temp_dir is None:
@@ -59,7 +59,7 @@ def main_annot_batch(data_dir, genom_fasta, is_fasta=None, temp_dir=None,
                 tab_file, mapped_fasta, genom_fasta, is_fasta,
                 os.path.join(temp_dir, folder), output_file, threshold, threads,
                 debug, keep_temp, partial_threshold, partial_len,
-                evalue=evalue, db_dir=db_dir, task=task)
+                evalue=evalue, db_dir=db_dir, task=task, homology_action=homology_action)
     finally:
         if not keep_temp:
             shutil.rmtree(db_dir, ignore_errors=True)

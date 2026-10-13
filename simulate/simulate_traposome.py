@@ -126,6 +126,33 @@ non-IS rows):
   divergence  is_divergence (realised: events / length of the source piece),
               is_div_sub, is_div_ins, is_div_del (event counts)
 insert_len is the length of the element actually inserted.
+
+Plasmid-genome shared segments (--homology_len, GitHub issue #5)
+----------------------------------------------------------------
+  --homology_len MIN MAX   plant --n_homology (default 1) segments of the
+                           plasmid, of length uniform in MIN-MAX bp (at most the
+                           plasmid length - 100), into the host genome copy used
+                           for the run: each replaces the same number of genome
+                           bases (no coordinate shift) at a random position (not
+                           within 5 kb of a contig end, a novel element or another
+                           planted segment), on a random strand, with substitutions
+                           at rate 1 - --homology_identity (default 1.0 = exact).
+                           A segment may cross the plasmid origin.
+  --homology_contam_frac F each contamination read is, with probability F
+                           (default 0.5), moved so that it overlaps a planted
+                           segment's genome copy by >= 100 bp (same length; a
+                           uniform draw would almost never hit a few kb of a
+                           Mb-size genome). The others stay uniform.
+Extra outputs: genome_with_homology.fasta (the genome the run used, including
+novel elements in element mode; the pipeline must use it as -g) and
+homology.tsv: segment_id, plasmid_start, plasmid_end (0-based half-open; end >
+plasmid length = crosses the origin), length, genome_contig, genome_start,
+genome_end (copy = genome_with_homology[start:end], reverse-complemented when
+genome_strand is '-'), genome_strand, identity. simulation.json gains the
+options and "homology_segments". All of this randomness comes from a separate
+random stream created only when --homology_len is given (the main stream draws
+for a contamination read are made as before and then overridden), so the
+default outputs are byte-identical to earlier versions.
 """
 
 import argparse
@@ -650,6 +677,75 @@ def write_fasta(path, records, width=70):
                 fh.write(seq[i:i + width] + "\n")
 
 
+HOMOLOGY_FIELDS = ["segment_id", "plasmid_start", "plasmid_end", "length", "genome_contig",
+                   "genome_start", "genome_end", "genome_strand", "identity"]
+HOMOLOGY_MARGIN = 5000
+HOMOLOGY_MIN_OVERLAP = 100
+
+
+def plant_homology(args, plasmid, genome, elements, hrng):
+    """Copy --n_homology plasmid segments into the genome (replacing genome
+    bases). Writes genome_with_homology.fasta and homology.tsv.
+
+    Returns (modified genome, list of segment dicts)."""
+    plen = len(plasmid)
+    genome = [(n, s) for n, s in genome]
+    lengths = [len(s) for _, s in genome]
+    taken = {}          # contig index -> [(start, end)] blocked intervals
+    for e in elements:
+        ci = next(i for i, (n, _) in enumerate(genome) if n == e["genome_contig"])
+        taken.setdefault(ci, []).append((e["genome_insert_pos"], e["genome_end"]))
+    segments = []
+    for k in range(args.n_homology):
+        length = min(hrng.randint(*args.homology_len), plen - 100)
+        pstart = hrng.randrange(plen)
+        seg = (plasmid + plasmid)[pstart:pstart + length]
+        strand = hrng.choice("+-")
+        copy = seg if strand == "+" else revcomp(seg)
+        identity = 1.0
+        if args.homology_identity < 1:
+            copy, st = diverge_element(hrng, copy, 1 - args.homology_identity, indel_share=0.0)
+            identity = round(1 - st["is_divergence"], 5)
+        for _ in range(1000):
+            ci = hrng.choices(range(len(genome)), weights=lengths, k=1)[0]
+            lo, hi = HOMOLOGY_MARGIN, lengths[ci] - HOMOLOGY_MARGIN - length
+            if hi <= lo:
+                continue
+            g = hrng.randrange(lo, hi)
+            if all(g + length + HOMOLOGY_MARGIN <= a or g >= b + HOMOLOGY_MARGIN
+                   for a, b in taken.get(ci, [])):
+                break
+        else:
+            sys.exit("--homology_len: genome too small to place the shared segments")
+        taken.setdefault(ci, []).append((g, g + length))
+        name, gseq = genome[ci]
+        genome[ci] = (name, gseq[:g] + copy + gseq[g + length:])
+        segments.append({"segment_id": f"shared_{k + 1}", "plasmid_start": pstart,
+                         "plasmid_end": pstart + length, "length": length, "genome_contig": name,
+                         "genome_start": g, "genome_end": g + length, "genome_strand": strand,
+                         "identity": identity})
+    write_fasta(os.path.join(args.out_dir, "genome_with_homology.fasta"), genome)
+    with open(os.path.join(args.out_dir, "homology.tsv"), "w", newline="") as fh:
+        w = csv.DictWriter(fh, HOMOLOGY_FIELDS, delimiter="\t")
+        w.writeheader()
+        for seg in segments:
+            w.writerow(seg)
+    return genome, segments
+
+
+def homology_contamination(hrng, segments, genome_by_name, length):
+    """A contamination read of ``length`` bp overlapping a random planted
+    segment by >= HOMOLOGY_MIN_OVERLAP bp. Returns (contig, start, molecule)."""
+    seg = hrng.choice(segments)
+    gseq = genome_by_name[seg["genome_contig"]]
+    length = min(length, len(gseq))
+    ov = min(HOMOLOGY_MIN_OVERLAP, seg["length"], length)
+    lo = max(0, seg["genome_start"] + ov - length)
+    hi = min(len(gseq) - length, seg["genome_end"] - ov)
+    start = hrng.randint(lo, max(lo, hi))
+    return seg["genome_contig"], start, gseq[start:start + length]
+
+
 ELEMENT_FIELDS = ["element_id", "length", "tir_len", "tir_left", "tir_right", "tir_mismatches",
                   "orf_start", "orf_end", "orf_strand", "genome_contig", "genome_insert_pos",
                   "genome_end", "genome_dr_len", "genome_dr_seq"]
@@ -756,6 +852,17 @@ def parse_args(argv=None):
                          "piece of MIN-MAX bp (default: off)")
     ap.add_argument("--is_truncate_frac", type=float, default=0.5,
                     help="With --is_truncate: fraction of IS clones that are truncated (default 0.5)")
+    ap.add_argument("--homology_len", type=int, nargs=2, default=None, metavar=("MIN", "MAX"),
+                    help="Plant plasmid segments of MIN-MAX bp into the genome copy used for the run "
+                         "(plasmid-genome shared segments, issue #5; default: off)")
+    ap.add_argument("--n_homology", type=int, default=1,
+                    help="With --homology_len: number of shared segments (default 1)")
+    ap.add_argument("--homology_identity", type=float, default=1.0,
+                    help="With --homology_len: identity of each genome copy to the plasmid, "
+                         "substitutions only (default 1.0)")
+    ap.add_argument("--homology_contam_frac", type=float, default=0.5,
+                    help="With --homology_len: fraction of contamination reads drawn to overlap a "
+                         "shared segment's genome copy (default 0.5)")
     ap.add_argument("--tsd", nargs="*", default=[], metavar="FAMILY=LEN", help="Override TSD lengths, e.g. IS4=10 Tn3=5")
     ap.add_argument("--seed", type=int, default=1, help="Random seed (default 1)")
     args = ap.parse_args(argv)
@@ -765,6 +872,14 @@ def parse_args(argv=None):
         ap.error("--is_truncate needs 0 < MIN <= MAX")
     if not 0 <= args.is_truncate_frac <= 1:
         ap.error("--is_truncate_frac must be in [0, 1]")
+    if args.homology_len is not None and not 0 < args.homology_len[0] <= args.homology_len[1]:
+        ap.error("--homology_len needs 0 < MIN <= MAX")
+    if args.n_homology < 1:
+        ap.error("--n_homology must be >= 1")
+    if not 0.5 <= args.homology_identity <= 1:
+        ap.error("--homology_identity must be in [0.5, 1]")
+    if not 0 <= args.homology_contam_frac <= 1:
+        ap.error("--homology_contam_frac must be in [0, 1]")
     if args.error_model == "ont":
         for k, v in ONT_PROFILES[args.ont_profile].items():
             if getattr(args, k) is None:
@@ -809,6 +924,12 @@ def main(argv=None):
     elements = []
     if args.novel_mode == "element":
         genome, elements = build_novel_elements(args, genome)
+    # shared segments: own random stream, created only when enabled (defaults stay byte-identical)
+    hrng = random.Random(f"homology-{args.seed}") if args.homology_len else None
+    homology_segments = []
+    if hrng is not None:
+        genome, homology_segments = plant_homology(args, plasmid, genome, elements, hrng)
+        genome_by_name = dict(genome)
     truth_fields = ["barcode", "read_id", "category", "clone_id", "element", "element_family",
                     "ref_pos", "orientation", "tsd_len", "tsd_seq", "insert_len",
                     "genome_contig", "genome_start", "genome_end", "read_strand", "fragmented", "read_len"]
@@ -896,6 +1017,10 @@ def main(argv=None):
                     length = min(len(gseq), max(500, int(rng.lognormvariate(8.5, 0.6))))
                     start = rng.randrange(0, len(gseq) - length + 1)
                     mol = gseq[start:start + length]
+                    if hrng is not None and hrng.random() < args.homology_contam_frac:
+                        contig, start, mol = homology_contamination(hrng, homology_segments,
+                                                                    genome_by_name, length)
+                        length = len(mol)
                     rec.update(category="contamination", genome_contig=contig,
                                genome_start=start, genome_end=start + length)
                 elif x < args.contamination_rate + args.deletion_rate:
@@ -956,6 +1081,11 @@ def main(argv=None):
         if args.is_truncate is None:
             params.pop("is_truncate")
             params.pop("is_truncate_frac")
+        if args.homology_len is None:
+            for k in ("homology_len", "n_homology", "homology_identity", "homology_contam_frac"):
+                params.pop(k)
+        else:
+            params["homology_segments"] = homology_segments
         if args.novel_mode == "segment":
             # keep simulation.json identical to earlier versions in the default mode
             for k in ("novel_mode", "n_novel_elements", "element_len", "tir_len", "tir_mismatch",

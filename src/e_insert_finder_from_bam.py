@@ -35,6 +35,16 @@ but the insert may then carry plasmid sequence from next to the origin.
 * ``quality``: integer part of the mean base quality of the primary record.
 * ``is_reverse``: strand of the alignment the insertion was found in / flanked by.
 
+Plasmid-genome shared segments (GitHub issue #5): when the ``map`` step wrote
+``plasmid_genome_homology.tsv`` (next to the BAM or in its parent folder) and
+the genome BAM ``07_*.bam`` is next to the plasmid BAM, every call is checked
+and ``<output stem>_homology_flags.tsv`` is written next to the output (see
+src/plasmid_genome_homology.py). A call is flagged when each plasmid flank of
+the insert ends inside a shared segment and the read's genome alignment runs
+contiguously across that flank/insert junction (a genomic read that only looks
+plasmid-flanked). insertion_from_bam.tab itself is unchanged; g_blast_annot
+uses the flags.
+
 Recep Can Altınbağ, 22 10 2024, v0.2
 """
 
@@ -43,6 +53,8 @@ import os
 from collections import OrderedDict, namedtuple
 
 import pysam
+
+from . import plasmid_genome_homology as homology
 
 logger = logging.getLogger(__name__)
 
@@ -260,12 +272,19 @@ def write_insertions(insertions, output_file):
             os.remove(tmp)
 
 
-def main_insert_finder_from_bam(bamfile, output_file, insertion_threshold=500):
+def main_insert_finder_from_bam(bamfile, output_file, insertion_threshold=500,
+                                homology_tsv=None, genome_bam=None):
     """Find insertions in ``bamfile`` and write them to ``output_file``.
+
+    Also writes the plasmid-genome homology flags next to ``output_file`` when
+    the homology table and the genome BAM are found (``homology_tsv`` /
+    ``genome_bam``, default: looked up next to ``bamfile``, see module
+    docstring).
 
     Returns the list of Insertion records.
     """
     insertions = find_insertions(bamfile, insertion_threshold)
     write_insertions(insertions, output_file)
     logger.info("Insertions written to %s", output_file)
+    homology.flag_for_tab(output_file, insertions, bamfile, homology_tsv, genome_bam)
     return insertions

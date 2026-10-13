@@ -7,6 +7,7 @@
 #   #total_insertions=<all annotated insertions>
 #   #IS_DB=<n>  #Genome=<n>  #Unannotated=<n>  #Contamination=<n>
 #                                            (one per line, always all four; other Note values too)
+#   #Homology_flagged=<n>                    (only when n > 0, see below)
 #   #percentage_denominator=IS_DB
 #   IS_family, IS_name, percentage, count
 #   ---
@@ -17,6 +18,12 @@
 #Unannotated over Contamination, then the highest Score.
 #Unannotated = insert flanked by plasmid but without IS/genome hit (a candidate
 #novel element, see l_novel_elements); it is reported, not used in the IS percentages.
+#
+#Plasmid-genome homology (GitHub issue #5): calls that g_blast_annot flagged as genomic
+#reads that only look plasmid-flanked through a shared segment have a Homology value
+#"shared_segment:<Note>". By default they are already labelled Contamination, so they
+#are not in the IS percentages; #Homology_flagged reports how many insertions carry the
+#flag (with blast_annot's "keep" mode their Note, and hence the counts, are unchanged).
 #-------------------------------------
 import logging
 import os
@@ -70,6 +77,10 @@ def summarize_condition(tab_file):
     note_counts = df["Note"].value_counts().to_dict() if total else {}
     note_counts = {str(k): int(v) for k, v in note_counts.items()}
 
+    homology_flagged = 0
+    if "Homology" in df.columns and total:
+        homology_flagged = int(df["Homology"].astype(str).str.startswith("shared_segment").sum())
+
     is_df = df[df["Note"] == "IS_DB"]
     is_count = int(is_df.shape[0])
     rows = []
@@ -79,7 +90,8 @@ def summarize_condition(tab_file):
         for (family, name), count in counts.items():
             rows.append((family, name, 100.0 * count / is_count, int(count)))
         rows.sort(key=lambda r: (-r[3], r[0], r[1]))
-    return {"total": total, "note_counts": note_counts, "is_count": is_count, "rows": rows}
+    return {"total": total, "note_counts": note_counts, "is_count": is_count, "rows": rows,
+            "homology_flagged": homology_flagged}
 
 
 def format_condition(condition, summary):
@@ -88,6 +100,8 @@ def format_condition(condition, summary):
     notes = summary["note_counts"]
     for note in NOTE_ORDER + sorted(set(notes) - set(NOTE_ORDER)):
         lines.append(f"#{note}={notes.get(note, 0)}")
+    if summary.get("homology_flagged"):
+        lines.append(f"#Homology_flagged={summary['homology_flagged']}")
     lines.append("#percentage_denominator=IS_DB")
     for family, name, pct, count in summary["rows"]:
         lines.append(f"{family}, {name}, {pct:.2f}, {count}")
@@ -108,7 +122,9 @@ def main_is_stat(data_dir, out_file):
         notes = summary["note_counts"]
         breakdown = ", ".join(f"{k}: {notes.get(k, 0)}" for k in NOTE_ORDER)
         print(f"{folder}: {summary['total']} insertions ({breakdown}); "
-              f"IS percentages are relative to the {summary['is_count']} IS_DB insertions")
+              f"IS percentages are relative to the {summary['is_count']} IS_DB insertions" +
+              (f"; {summary['homology_flagged']} flagged as plasmid-genome homology artefacts"
+               if summary.get("homology_flagged") else ""))
         for family, name, pct, count in summary["rows"]:
             logger.info("  %s %s: %.2f%% (%d)", family, name, pct, count)
         if summary["is_count"] == 0:

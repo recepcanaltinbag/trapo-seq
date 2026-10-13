@@ -65,6 +65,19 @@ Conventions scored against
   closest first, ties broken by matching label, then support) to a true insertion event (clones.tsv, n_reads > 0) within
   --tol of its ambiguity window; unmatched sites are spurious.
 
+* Plasmid-genome homology (section "homology", issue #5). best_alignment.tab
+  rows flagged as homology artefacts have Homology = "shared_segment:<Note>"
+  (the Note they would have had; by default the Note itself is then
+  Contamination). "before" = calls by the unflagged Note, "after" = by the
+  Note. A contamination read is attributable to homology if it overlaps a
+  planted shared segment's genome copy (SIM_DIR/homology.tsv) by >= 1 bp.
+  Reported: false calls on contamination reads before/after (all and
+  homology-attributable), how many of the attributable ones the flag catches,
+  flagged reads by truth category (flags on true insertions are errors),
+  annotation recall of true insertions before/after, and the transposition
+  rate from 08_mapping_stats.txt (corrected and uncorrected) next to the true
+  one (insertion reads / plasmid reads).
+
 Only the Python standard library is used.
 """
 
@@ -84,6 +97,7 @@ NOTE_PRIORITY = {"IS_DB": 0, "Genome": 1, "Unannotated": 2, "Contamination": 3}
 CALL_NOTES = ("IS_DB", "Genome", "Unannotated")   # biological insertion calls
 NOTE_NAMES = ("IS_DB", "Genome", "Unannotated", "Contamination")
 NA = None  # serialised as "N/A" in TSV, null in JSON
+HOMOLOGY_PREFIX = "shared_segment:"
 
 
 # ---------------------------------------------------------------- helpers
@@ -327,7 +341,12 @@ def parse_annot(path):
             "s_end": to_int(rec.get("Subject End")),
             "note": (rec.get("Note") or "").strip(),
             "ref_pos": to_int(rec.get("ref_pos")),
+            "homology": (rec.get("Homology") or "-").strip(),
         })
+    for r in rows:
+        h = r["homology"]
+        r["homology_flagged"] = h.startswith(HOMOLOGY_PREFIX)
+        r["note_unflagged"] = h[len(HOMOLOGY_PREFIX):] if r["homology_flagged"] else r["note"]
     return rows
 
 
@@ -365,8 +384,44 @@ def load_predictions(results_dir, barcode):
                            os.path.join(glob.escape(bdir), "best_alignment*.tab"))
     dr = first_existing(os.path.join(glob.escape(results_dir), "insertions", f"{barcode}_insertions.csv"),
                         os.path.join(glob.escape(bdir), "*insertions*.csv"))
+    stats = os.path.join(bdir, "08_mapping_stats.txt")
     return {"finder": parse_finder(finder), "annot": parse_annot(annot), "dr": parse_dr(dr),
-            "files": {"finder": finder, "annot": annot, "dr": dr}}
+            "mapping_stats": parse_mapping_stats(stats),
+            "files": {"finder": finder, "annot": annot, "dr": dr,
+                      "mapping_stats": stats if os.path.exists(stats) else None}}
+
+
+def parse_mapping_stats(path):
+    """08_mapping_stats.txt -> {key: value string} (None if missing)."""
+    if not os.path.exists(path):
+        return None
+    out = {}
+    with open(path) as fh:
+        for line in fh:
+            if ":" in line:
+                k, v = line.rsplit(":", 1)
+                out[k.strip()] = v.strip()
+    return out
+
+
+def load_homology(sim_dir):
+    """Planted shared segments (homology.tsv of the simulator) or None."""
+    path = os.path.join(sim_dir, "homology.tsv")
+    if not os.path.exists(path):
+        return None
+    segs = read_tsv(path)
+    for sg in segs:
+        for k in ("genome_start", "genome_end", "length"):
+            sg[k] = to_int(sg.get(k))
+    return segs
+
+
+def homology_overlap(t, segments):
+    """bp of a contamination read's genome interval inside planted shared segments."""
+    if not segments or t["category"] != "contamination" or t["genome_start"] is None:
+        return 0
+    return sum(max(0, min(t["genome_end"], sg["genome_end"]) - max(t["genome_start"], sg["genome_start"]))
+               for sg in segments if sg.get("genome_contig") == t.get("genome_contig"))
 
 
 # ---------------------------------------------------------------- per-read selection
@@ -460,7 +515,7 @@ def note_pcts(notes, n):
 
 
 def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, min_support, site_link=15,
-                  novel_absent=False):
+                  novel_absent=False, homology_segments=None):
     res = {"files": preds["files"]}
     per_read = []
     finder_by, finder_unmatched = group_by_read(preds["finder"], resolve)
@@ -488,6 +543,11 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
                "pred_type": fp["type"] if fp else None,
                "annot_note": ap["note"] if ap else None, "annot_subject": ap["subject"] if ap else None,
                "annot_notes_all": ",".join(sorted({r["note"] for r in arows})),
+               "annot_note_unflagged": (min(arows, key=lambda r: (NOTE_PRIORITY.get(r["note_unflagged"], 9),
+                                                                   -(r["score"] or 0)))["note_unflagged"]
+                                        if arows else None),
+               "homology_flagged": any(r["homology_flagged"] for r in arows),
+               "homology_overlap": homology_overlap(t, homology_segments),
                "dr_point": dp["point"] if dp else None, "dr_len": dp["rep_len"] if dp else None,
                "dr_seq": dp["rep_seq"] if dp else None,
                "rep_lo": t.get("rep_lo"), "rep_hi": t.get("rep_hi"), "ext_seq": t.get("ext_seq"),
@@ -510,6 +570,7 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
                 rec["class_ok"] = novel_ok(ap)
                 rec["class_ok_any_row"] = any(novel_ok(r) for r in arows)
         rec["_ap"], rec["_arows"] = ap, arows
+        rec["annot_notes_unflagged_all"] = ",".join(sorted({r["note_unflagged"] for r in arows}))
         per_read.append(rec)
 
     pos_reads = [r for r in per_read if r["category"] in INSERTION_CATS]
@@ -594,6 +655,11 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
         res["classification"] = cl
     else:
         res["classification"] = {"available": False}
+
+    # ---- plasmid-genome homology (issue #5)
+    res["homology"] = homology_metrics(per_read, have_annot,
+                                       None if homology_segments is None else len(homology_segments),
+                                       preds.get("mapping_stats"))
 
     # ---- TSD / DR
     res["tsd"] = dict(tsd_metrics(pos_reads, plen), unmatched_read_ids=dr_unmatched) if have_dr else {"available": False}
@@ -680,6 +746,47 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
     return res, per_read, sites
 
 
+def homology_metrics(per_read, have_annot, n_segments, mapping_stats=None):
+    """Section "homology" (see module docstring); per_read may span barcodes."""
+    if not have_annot:
+        return {"available": False}
+    pos = [r for r in per_read if r["category"] in INSERTION_CATS]
+    contam = [r for r in per_read if r["category"] == "contamination"]
+    hom = [r for r in contam if r["homology_overlap"] > 0]
+
+    def called_before(r):
+        return any(n in CALL_NOTES for n in (r["annot_notes_unflagged_all"] or "").split(","))
+
+    def called_after(r):
+        return any(n in CALL_NOTES for n in (r["annot_notes_all"] or "").split(","))
+    flagged = [r for r in per_read if r["homology_flagged"]]
+    caught = [r for r in hom if called_before(r) and r["homology_flagged"]]
+    d = {"available": True,
+         "shared_segments": n_segments,
+         "contamination_reads": len(contam),
+         "contamination_reads_overlapping_shared": len(hom) if n_segments is not None else NA,
+         "false_calls_contamination_before": sum(called_before(r) for r in contam),
+         "false_calls_contamination_after": sum(called_after(r) for r in contam),
+         "false_calls_homology_before": sum(called_before(r) for r in hom) if n_segments is not None else NA,
+         "false_calls_homology_after": sum(called_after(r) for r in hom) if n_segments is not None else NA,
+         "flag_caught_homology": len(caught) if n_segments is not None else NA,
+         "flag_sensitivity": (ratio(len(caught), sum(called_before(r) for r in hom))
+                              if n_segments is not None else NA),
+         "flagged_reads": len(flagged),
+         "flagged_by_truth": dict(Counter(r["category"] for r in flagged)),
+         "flagged_true_insertions": sum(r["category"] in INSERTION_CATS for r in flagged),
+         "recall_annot_before": ratio(sum(called_before(r) for r in pos), len(pos)),
+         "recall_annot_after": ratio(sum(called_after(r) for r in pos), len(pos))}
+    if mapping_stats is not None:
+        plasmid_cats = INSERTION_CATS + ("empty_plasmid", "deletion")
+        n_plasmid = sum(r["category"] in plasmid_cats for r in per_read)
+        d["transposition_rate_true"] = ratio(len(pos), n_plasmid)
+        d["transposition_rate_reported"] = to_float(mapping_stats.get("Transposition Rate"))
+        d["transposition_rate_uncorrected"] = to_float(mapping_stats.get("Transposition Rate (uncorrected)",
+                                                                         mapping_stats.get("Transposition Rate")))
+    return d
+
+
 def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, min_read_len, min_support):
     """Overall metrics: re-score the pooled reads (counts add up; ratios recomputed)."""
     # Pool by re-running the read-level scorer on the union; sites stay per-barcode, so sum them.
@@ -756,6 +863,19 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
         overall["sites"] = o
     else:
         overall["sites"] = {"available": False}
+    hs = [b["homology"] for b in per_barcode.values() if b["homology"].get("available")]
+    if hs:
+        o = homology_metrics(per_read_all, True, hs[0]["shared_segments"])
+        rates = [(b["homology"].get("transposition_rate_true"), b["homology"].get("transposition_rate_reported"),
+                  b["homology"].get("transposition_rate_uncorrected")) for b in per_barcode.values()
+                 if b["homology"].get("transposition_rate_reported") is not None]
+        if rates:
+            for i, k in enumerate(("true", "reported", "uncorrected")):
+                vals = [x[i] for x in rates if x[i] is not None]
+                o[f"transposition_rate_{k}_mean"] = round(statistics.mean(vals), 4) if vals else NA
+        overall["homology"] = o
+    else:
+        overall["homology"] = {"available": False}
     overall["truth_counts"] = dict(Counter(r["category"] for r in per_read_all))
     return overall
 
@@ -763,6 +883,7 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
 def evaluate(sim_dir, results_dir, tol=20, min_read_len=0, min_support=1, barcodes=None, refs=None, site_link=15,
              novel_absent=False):
     truth, clones, plen, have_seq = load_truth(sim_dir, refs)
+    homology_segments = load_homology(sim_dir)
     resolve = make_id_resolver(truth)
     by_bc = defaultdict(list)
     for t in truth.values():
@@ -773,7 +894,7 @@ def evaluate(sim_dir, results_dir, tol=20, min_read_len=0, min_support=1, barcod
         preds = load_predictions(results_dir, bc)
         res, per_read, sites = score_barcode(by_bc[bc], preds, [c for c in clones if c["barcode"] == bc],
                                              resolve, plen, tol, min_read_len, min_support, site_link,
-                                             novel_absent)
+                                             novel_absent, homology_segments)
         per_barcode[bc] = res
         per_read_all += per_read
         sites_all += sites
@@ -846,6 +967,8 @@ SUMMARY_KEYS = [
     ("classification", "novel_insertion.accuracy"), ("classification", "novel_insertion.pct_note_Unannotated"),
     ("classification", "contamination_note_true_insertions"),
     ("sites", "event_recall"), ("sites", "site_precision"), ("sites", "spurious_sites"),
+    ("homology", "false_calls_homology_before"), ("homology", "false_calls_homology_after"),
+    ("homology", "flagged_true_insertions"),
     ("tsd", "pct_tsd_reported_nonzero"), ("tsd", "length_accuracy"), ("tsd", "sequence_accuracy"),
     ("tsd", "consistent_accuracy"), ("tsd", "consistent_accuracy_when_reported"),
 ]

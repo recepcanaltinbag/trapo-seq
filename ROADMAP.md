@@ -41,7 +41,7 @@ Priority order: results that are scientifically wrong first, then crashes.
 | ⬜ | **Chimera / artefact flags per insertion**: true insertions have adjacent plasmid flanks (overlap = TSD), same strand, both flanks present; ONT chimeras and ligation artefacts show non-adjacent flanks, strand flips, one-sided junctions or internal adapters. Add `flanks`/`flank_gap`/`strand_consistent` evidence to the insertion table, an `artefact_flag`, and report support from independent reads (both read strands, distinct read ends). Seen on test data: E. coli segment at 3243 is one-sided in all 3 reads (artefact), IS10 at 4839 has a 9 bp DR on reads from both strands (genuine). | — |
 | ⬜ | Simulator: ONT chimeras (plasmid–plasmid, plasmid–genome, plasmid–foreign), internal adapters, barcode bleed-through, so the flags can be benchmarked | — |
 | ⬜ | **Element boundary vs TSD ambiguity** when element termini resemble the target site (VD2 ISPs1: termini `TAGG…CCTA`, plasmid DR `CCTA`; curated 913 bp vs read consensus 904 bp; DR finder −2 with curated bounds). Resolve with per-site junction consensus across reads and multi-copy genomic comparison; report boundary confidence | — |
-| ⬜ | Plasmid–genome homologous regions cause false insertions: detect shared segments (plasmid vs genome BLAST), mask or flag them; add homologous segments to the simulator to test | #5 |
+| ✅ | Plasmid–genome homologous regions cause false insertions: detect shared segments (plasmid vs genome BLAST), mask or flag them; add homologous segments to the simulator to test | #5 |
 
 Acceptance: the original `test-data` and a simulated dataset run end to end
 with no errors; each fix has a regression test.

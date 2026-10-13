@@ -4,6 +4,7 @@
 #
 # Usage (run from the data directory that holds one folder per sample):
 #   01_data_prep_from_py.sh PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N] [--linear]
+#       [--homology-min-len N] [--homology-min-identity F] [--insertion-threshold N]
 #
 # Each folder <name>/ must contain <name><SUFFIX> (default SUFFIX: ".fastq").
 # Outputs written into each folder:
@@ -25,6 +26,18 @@
 # is aligned instead of being left in a soft clip.
 # --linear restores the plain linear mapping. The Python interpreter used for
 # the merge is $TRAPOSEQ_PYTHON (default: python3); it needs pysam.
+#
+# Plasmid-genome shared segments (GitHub issue #5): before the samples are
+# mapped, src/plasmid_genome_homology.py compares the plasmid with the genome
+# (minimap2 -x asm20) and writes ./plasmid_genome_homology.tsv (segments of at
+# least --homology-min-len bp, default 100, identity >= --homology-min-identity,
+# default 0.8), with a WARNING for segments >= --insertion-threshold (default
+# 500), which can create false insertion calls. 08_mapping_stats.txt does not
+# count a plasmid read as genome-mapped when its genome alignments only cover
+# plasmid-aligned sequence (a shared segment), and excludes genomic reads that
+# reach the plasmid only through a shared segment; the uncorrected numbers are
+# reported too. Both need $PYTHON with pysam; without it the homology table is
+# not written and the uncorrected statistics are reported.
 #
 # Every output is written to a temporary file and renamed only when the step
 # succeeded, so a failed run never leaves a partial file that a later run
@@ -48,6 +61,9 @@ FORCE=false
 FASTQ_SUFFIX=".fastq"
 THREADS=4
 CIRCULAR=true
+HOMOLOGY_MIN_LEN=100
+HOMOLOGY_MIN_IDENTITY=0.8
+INSERTION_THRESHOLD=500
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -57,10 +73,16 @@ while [[ $# -gt 0 ]]; do
         --threads) [[ $# -ge 2 && "$2" =~ ^[1-9][0-9]*$ ]] || die "--threads needs a positive integer"
                    THREADS="$2"; shift 2 ;;
         --linear) CIRCULAR=false; shift ;;
+        --homology-min-len) [[ $# -ge 2 && "$2" =~ ^[1-9][0-9]*$ ]] || die "--homology-min-len needs a positive integer"
+                            HOMOLOGY_MIN_LEN="$2"; shift 2 ;;
+        --homology-min-identity) [[ $# -ge 2 && "$2" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] || die "--homology-min-identity needs a value in [0, 1]"
+                                 HOMOLOGY_MIN_IDENTITY="$2"; shift 2 ;;
+        --insertion-threshold) [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || die "--insertion-threshold needs a non-negative integer"
+                               INSERTION_THRESHOLD="$2"; shift 2 ;;
         *) POSITIONAL+=("$1"); shift ;;
     esac
 done
-[[ ${#POSITIONAL[@]} -eq 2 ]] || die "usage: $0 PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N] [--linear]"
+[[ ${#POSITIONAL[@]} -eq 2 ]] || die "usage: $0 PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N] [--linear] [--homology-min-len N] [--homology-min-identity F] [--insertion-threshold N]"
 [[ -f "${POSITIONAL[0]}" ]] || die "plasmid FASTA not found: ${POSITIONAL[0]}"
 [[ -f "${POSITIONAL[1]}" ]] || die "genome FASTA not found: ${POSITIONAL[1]}"
 QUERY_FASTA=$(abspath "${POSITIONAL[0]}")
@@ -71,10 +93,21 @@ for tool in minimap2 samtools; do
 done
 SCRIPT_DIR=$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 CIRCULAR_PY="$SCRIPT_DIR/../src/circular_mapping.py"
+HOMOLOGY_PY="$SCRIPT_DIR/../src/plasmid_genome_homology.py"
 PYTHON=${TRAPOSEQ_PYTHON:-python3}
 if [[ "$CIRCULAR" == true ]]; then
     [[ -f "$CIRCULAR_PY" ]] || die "helper not found: $CIRCULAR_PY"
     command -v "$PYTHON" >/dev/null 2>&1 || die "$PYTHON not found (set TRAPOSEQ_PYTHON or use --linear)"
+fi
+# The homology helpers need Python with pysam; without them the uncorrected
+# statistics are written (as before).
+HOMOLOGY=false
+if [[ -f "$HOMOLOGY_PY" ]] && command -v "$PYTHON" >/dev/null 2>&1 \
+        && "$PYTHON" -c "import pysam" >/dev/null 2>&1; then
+    HOMOLOGY=true
+else
+    echo "WARNING: $PYTHON with pysam not available: plasmid-genome homology is not checked and" \
+         "08_mapping_stats.txt is not corrected for shared segments." >&2
 fi
 
 # ---------------------------------------------------------- temp-file helpers
@@ -132,6 +165,16 @@ summarize_mappings() {
     local total plasmid both only_plasmid rate tmp
 
     total=$(count_reads_in_fastq "$fastq_file")
+    if [[ "$HOMOLOGY" == true ]]; then
+        # Corrected for plasmid-genome shared segments (see the header).
+        tmp=$(tmp_for "$output_txt"); CURRENT_TMP=$tmp
+        "$PYTHON" "$HOMOLOGY_PY" mapstats "$plasmid_bam" "$genome_bam" "$total" "$tmp" \
+            --genome "$GENOME" --threads "$THREADS" >/dev/null
+        commit "$tmp" "$output_txt"
+        cat -- "$output_txt"
+        echo "Mapping statistics written to $output_txt"
+        return 0
+    fi
     plasmid=$(count_mapped_read_names "$plasmid_bam")
     both=$(count_mapped_read_names "$genome_bam")
     only_plasmid=$(( plasmid - both ))
@@ -243,6 +286,14 @@ if [[ "$CIRCULAR" == true ]]; then
     WORK_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/trapo-seq-map.XXXXXX")
     ROTATED_FASTA="$WORK_TMPDIR/plasmid_rotated.fasta"
     "$PYTHON" "$CIRCULAR_PY" rotate "$QUERY_FASTA" "$ROTATED_FASTA"
+fi
+if [[ "$HOMOLOGY" == true ]]; then
+    echo "Plasmid-genome shared segments (minimap2 -x asm20, >= $HOMOLOGY_MIN_LEN bp, identity >= $HOMOLOGY_MIN_IDENTITY)"
+    "$PYTHON" "$HOMOLOGY_PY" detect "$QUERY_FASTA" "$GENOME" "$PWD/plasmid_genome_homology.tsv" \
+        --min-len "$HOMOLOGY_MIN_LEN" --min-identity "$HOMOLOGY_MIN_IDENTITY" \
+        --warn-len "$INSERTION_THRESHOLD" --threads "$THREADS"
+else
+    rm -f -- plasmid_genome_homology.tsv     # never leave a table from an earlier run
 fi
 found=0
 for dir in */; do
