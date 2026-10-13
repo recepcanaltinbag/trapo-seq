@@ -17,6 +17,19 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
 - `blast_annot*`: `--evalue` (default 1e-10), `--blast_task`
   (`megablast` | `dc-megablast` | `blastn`), `--keep_temp`.
 - Test suite (`pytest`): simulator, CLI smoke tests, annotation unit tests.
+- **`novel_elements` subcommand** (`src/l_novel_elements.py`): clusters
+  inserts labelled *Genome* across samples by their genomic interval, defines
+  element boundaries from read alignment ends refined by **terminal inverted
+  repeats (TIRs)** and the **genomic direct repeat**, reports the longest ORF,
+  plasmid insertion sites, genomic copy number, similarity to curated IS, and a
+  verdict (`mobile_element_candidate` / `partial_evidence` / `genome_segment`).
+  On 30 simulated datasets (60 synthetic elements): 59/60 recovered as one
+  cluster each, boundaries exact for 53/59 and within 2 bp for all, TIR found
+  for 58/59, genomic DR exact for 53/59; random genome intervals give 1.1 %
+  `mobile_element_candidate`.
+- Simulator `--novel_mode element`: synthetic mobile elements with TIRs, an
+  ORF and a genomic DR, inserted into a copy of the genome and then into the
+  plasmid; truth in `elements.tsv`. Default output is unchanged (byte-identical).
 
 ### Changed
 - `map --threads` (default 4) for minimap2 and samtools: on 20 k simulated

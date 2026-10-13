@@ -10,7 +10,7 @@ from conftest import REPO
 CLI = os.path.join(REPO, "trapo-seq.py")
 SUBCOMMANDS = ["read_histogram", "filter", "map", "insert_finder", "insert_finder_batch",
                "blast_annot", "blast_annot_batch", "is_stat", "heatmap", "dr_finder",
-               "dr_logo", "in_del_plot", "kde_mobile", "map_dist", "test"]
+               "dr_logo", "in_del_plot", "kde_mobile", "map_dist", "novel_elements", "test"]
 
 
 def run(args, cwd):

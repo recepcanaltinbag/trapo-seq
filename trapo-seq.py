@@ -140,6 +140,21 @@ def main():
     map_dist_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     map_dist_parser.add_argument("-f", "--fastq", type=str, default=None, help="Optional raw fastq, to report the fraction of reads mapped")
 
+    novel_parser = subparsers.add_parser("novel_elements", help="Cluster and characterise novel (non-database) inserts: boundaries, TIRs, genomic DR, longest ORF")
+    novel_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Data folder with barcode folders (after blast_annot_batch)")
+    novel_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="Genome FASTA, the same one used for blast_annot_batch")
+    novel_parser.add_argument("--is_fasta", type=str, default=None, help="Curated IS FASTA, to flag clusters that are copies of known IS (recommended)")
+    novel_parser.add_argument("-o", "--out_dir", type=str, default=None, help="Output folder, default: <input_dir>/novel_elements")
+    novel_parser.add_argument("--min_reads", type=int, default=2, help="Minimum reads per element cluster, default: 2")
+    novel_parser.add_argument("--threads", type=int, default=2, help="Threads for minimap2, default: 2")
+    novel_parser.add_argument("--flank_search", type=int, default=60, help="bp searched around each estimated element end for TIRs, default: 60")
+    novel_parser.add_argument("--min_tir_len", type=int, default=10, help="Minimum TIR length, default: 10")
+    novel_parser.add_argument("--min_tir_identity", type=float, default=0.75, help="Minimum TIR identity (0-1), default: 0.75")
+    novel_parser.add_argument("--min_tir_score", type=int, default=22, help="Minimum TIR alignment score, default: 22")
+    novel_parser.add_argument("--min_dr_len", type=int, default=3, help="Minimum genomic DR length counted as evidence, default: 3")
+    novel_parser.add_argument("--min_orf_aa", type=int, default=200, help="Minimum longest ORF (aa) counted as evidence, default: 200")
+    novel_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary files")
+
     test_parser = subparsers.add_parser("test", help="to test the pipeline")
 
     # Arguments
@@ -250,6 +265,17 @@ def main():
             from src.c_map_dist import main_map_dist
             print("\nPlotting plasmid and genome read distributions...\n")
             main_map_dist(args.bam, args.output, fastq_file=args.fastq)
+
+        #L_NOVEL_ELEMENTS
+        elif args.command == "novel_elements":
+            from src.l_novel_elements import main_novel_elements
+            print("\nCharacterising novel elements...\n")
+            main_novel_elements(args.input_dir, args.genome_fasta, out_dir=args.out_dir,
+                                min_reads=args.min_reads, threads=args.threads,
+                                flank_search=args.flank_search, is_fasta=args.is_fasta,
+                                keep_temp=args.keep_temp, min_tir_len=args.min_tir_len,
+                                min_tir_identity=args.min_tir_identity, min_tir_score=args.min_tir_score,
+                                min_dr_len=args.min_dr_len, min_orf_aa=args.min_orf_aa)
 
         #TEST
         elif args.command == "test":
