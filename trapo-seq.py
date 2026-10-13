@@ -71,25 +71,29 @@ def main():
     blast_annot_parser.add_argument("-i", "--ins_bam", type=str, required=True, help="Path of insertions from bam tabular file")
     blast_annot_parser.add_argument("-m", "--mapped_fasta", type=str, required=True, help="path of mapped reads in fasta format")
     blast_annot_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="path of genome in fasta format")
-    blast_annot_parser.add_argument("--is_fasta", type=str, required=False, help="path of manually curated ISes")
-    blast_annot_parser.add_argument("--temp", type=str, default="data/temp", help="temp directory, default :temp")
+    blast_annot_parser.add_argument("--is_fasta", type=str, default=None, help="path of manually curated ISes (>Family_Name headers); a placeholder database is used if omitted")
+    blast_annot_parser.add_argument("--temp", type=str, default="temp", help="temp directory, default: temp")
     blast_annot_parser.add_argument("-o", "--output", type=str, default="best_alignment.tab", help="Output file")
     blast_annot_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
-    blast_annot_parser.add_argument("--no_temp", action="store_false", help="To delete temp folder, add this")
+    blast_annot_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary BLAST files and databases (for debugging)")
+    blast_annot_parser.add_argument("--evalue", type=float, default=1e-10, help="BLAST E-value cutoff for insert annotation, default: 1e-10")
+    blast_annot_parser.add_argument("--blast_task", choices=["megablast", "dc-megablast", "blastn"], default="megablast", help="BLAST search mode; dc-megablast is more sensitive for divergent inserts, default: megablast")
     blast_annot_parser.add_argument("--partial_threshold", type=int, default=80, help="For big insertions, if it has lower coverage than this value (and partial_len is used with this value), eliminate. Value: 0-100, default:80")
     blast_annot_parser.add_argument("--partial_len", type=int, default=8000, help="For big insertions, if it is higher than this value, elimiation will be based on partial threshold, It is effective if there is multiple IS and TNs together. default:8000")
 
     blast_annot_batch_parser = subparsers.add_parser("blast_annot_batch", help="Annotation with Blast in Batch mode")
     blast_annot_batch_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Folder of folders including bam files")
     blast_annot_batch_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="path of genome in fasta format")
-    blast_annot_batch_parser.add_argument("--is_fasta", type=str, required=True, help="path of manually curated ISes")
-    blast_annot_batch_parser.add_argument("--temp", type=str, default="data/temp", help="temp directory, default :temp")
+    blast_annot_batch_parser.add_argument("--is_fasta", type=str, default=None, help="path of manually curated ISes (>Family_Name headers); a placeholder database is used if omitted")
+    blast_annot_batch_parser.add_argument("--temp", type=str, default=None, help="temp directory, default: <input_dir>/temp")
     blast_annot_batch_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_batch_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_batch_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
-    blast_annot_batch_parser.add_argument("--no_temp", action="store_false", help="To delete temp folder, add this")
+    blast_annot_batch_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary BLAST files and databases (for debugging)")
+    blast_annot_batch_parser.add_argument("--evalue", type=float, default=1e-10, help="BLAST E-value cutoff for insert annotation, default: 1e-10")
+    blast_annot_batch_parser.add_argument("--blast_task", choices=["megablast", "dc-megablast", "blastn"], default="megablast", help="BLAST search mode; dc-megablast is more sensitive for divergent inserts, default: megablast")
     blast_annot_batch_parser.add_argument("--partial_threshold", type=int, default=80, help="For big insertions, if it has lower coverage than this value (and partial_len is used with this value), eliminate. Value: 0-100, default:80")
     blast_annot_batch_parser.add_argument("--partial_len", type=int, default=8000, help="For big insertions, if it is higher than this value, elimiation will be based on partial threshold, It is effective if there is multiple IS and TNs together. default:8000")
 
@@ -180,16 +184,19 @@ def main():
         elif args.command == "blast_annot":
             from src.g_blast_annot import main_annot
             print(f"\nBlasting to annotate insertions..\n")
-            main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, args.is_fasta, args.temp, args.output, args.threshold, args.threads, args.debug, args.no_temp, args.partial_threshold, args.partial_len)
+            main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, is_fasta=args.is_fasta, temp_dir=args.temp,
+                       output_csv=args.output, threshold=args.threshold, threads=args.threads, debug=args.debug,
+                       keep_temp=args.keep_temp, partial_threshold=args.partial_threshold, partial_len=args.partial_len,
+                       evalue=args.evalue, task=args.blast_task)
         
         #G_BLAST_ANNOT_BATCH
         elif args.command == "blast_annot_batch":
             from src.g_blast_annot_batch import main_annot_batch
             print(f"\n[BATCH] Blasting to annotate insertions..\n")
-            the_is_fasta = args.is_fasta
-            if args.is_fasta == None:
-                the_is_fasta = 'src/dummy_is_file.fasta'
-            main_annot_batch(args.input_dir, args.genome_fasta, args.is_fasta, args.temp,  args.threshold, args.threads, args.debug, args.no_temp,  args.partial_threshold, args.partial_len)
+            main_annot_batch(args.input_dir, args.genome_fasta, is_fasta=args.is_fasta, temp_dir=args.temp,
+                             threshold=args.threshold, threads=args.threads, debug=args.debug,
+                             keep_temp=args.keep_temp, partial_threshold=args.partial_threshold,
+                             partial_len=args.partial_len, evalue=args.evalue, task=args.blast_task)
 
         #H_IS_Stats
         elif args.command == "is_stat":
