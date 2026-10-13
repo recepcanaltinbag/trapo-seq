@@ -33,6 +33,14 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   overridable (presets are approximations). Runs in time proportional to the
   number of errors: 20 k reads in 21.5 s (r9.4.1) / 9.1 s (r10.4.1) vs ~180 s
   for the default uniform model, whose output is unchanged.
+- Simulator `--is_divergence F` and `--is_truncate MIN MAX`
+  (`--is_truncate_frac`): curated-IS clones carry a divergent and/or truncated
+  copy of the element; defaults keep output byte-identical.
+- Benchmark: `run_benchmark.py --reuse_work / --from_step / --snapshot_after`
+  with a stamp that refuses mismatched reuse, and per-step CPU time;
+  `run_grid.py` shares mapping + insert finding across annotation variants
+  (identical metrics, ~35 % less work) and adds IS divergence/truncation sweeps
+  (full preset: 549 cells).
 - Simulator `--novel_mode element`: synthetic mobile elements with TIRs, an
   ORF and a genomic DR, inserted into a copy of the genome and then into the
   plasmid; truth in `elements.tsv`. Default output is unchanged (byte-identical).

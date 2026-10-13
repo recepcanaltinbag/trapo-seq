@@ -11,6 +11,8 @@ import pytest
 
 import run_grid as rg
 
+from conftest import REPO, TEST_DATA, requires_tools
+
 PROFILES = {"r9.4.1": {"read_accuracy_mean": 0.92}, "r10.4.1": {"read_accuracy_mean": 0.98}}
 
 
@@ -143,7 +145,8 @@ NOTES = [("is_insertion", 1, 1, "IS_DB", "True"), ("is_insertion", 1, 1, "Contam
 
 
 def ctx_for(out):
-    return {"out": str(out), "jobs": 2, "threads": 1, "keep": False, "max_cells": 0}
+    return {"out": str(out), "jobs": 2, "threads": 1, "keep": False, "max_cells": 0,
+            "work_root": os.path.join(str(out), "work")}
 
 
 # ---------------------------------------------------------------- resume
@@ -271,3 +274,147 @@ def test_manifest_records_status(tmp_path):
         m = json.load(fh)
     assert [c["status"] for c in m["cells"]] == ["done", "failed"]
     assert m["n_done"] == 1 and m["tools"]["minimap2"] == "2.31"
+
+
+# ---------------------------------------------------------------- grouping (fakes)
+def test_group_key_shares_upstream_only_across_annotation_settings():
+    cells = rg.expand_spec(tiny_spec(), PROFILES)
+    groups = {}
+    for c in cells:
+        groups.setdefault(rg.group_key(c), []).append(c)
+    for cs in groups.values():
+        assert len({(c["sim_id"], c["pipeline"]["checkout"], c["pipeline"]["profile"]) for c in cs}) == 1
+    # per dataset: one v0.1.0 group + one dev group
+    assert len(groups) == 2 * len({c["sim_id"] for c in cells})
+    assert max(len(cs) for cs in groups.values()) == 2
+
+
+def _grouping_run(tmp_path, make_snapshot=True, group=True):
+    cells = [c for c in rg.expand_spec(tiny_spec(), PROFILES) if c["sweeps"] == ["accuracy"]]
+    ctx = ctx_for(tmp_path)
+    ctx["group"] = group
+    calls, finished = [], set()
+
+    def fake_cell(cell, ctx):
+        up = dict((ctx.get("upstream") or {}).get(cell["cell_id"]) or {"role": "single"})
+        calls.append((cell["cell_id"], up))
+        if up["role"] == "follower":
+            lead = [cid for cid, u in calls if u.get("role") == "lead" and u["group"] == up["group"]]
+            assert lead and lead[0] in finished              # followers start after their lead
+            assert os.path.exists(os.path.join(up["snapshot"], ".run_benchmark_stamp.json"))
+        if up["role"] == "lead" and make_snapshot:
+            os.makedirs(up["snapshot"])
+            open(os.path.join(up["snapshot"], ".run_benchmark_stamp.json"), "w").close()
+        write_fake_cell(ctx["out"], cell, 0.9, NOTES)
+        finished.add(cell["cell_id"])
+        return "done"
+
+    st = rg.execute(cells, ctx, fake_cell, lambda *a: None)
+    assert all(v == "done" for v in st.values()) and len(calls) == len(cells)
+    return cells, calls, ctx
+
+
+def test_grouping_lead_then_followers_and_cleanup(tmp_path):
+    cells, calls, ctx = _grouping_run(tmp_path)
+    roles = [u["role"] for _, u in calls]
+    groups = {}
+    for c in cells:
+        groups.setdefault(rg.group_key(c), []).append(c)
+    multi = [cs for cs in groups.values() if len(cs) > 1]
+    assert multi and roles.count("lead") == len(multi)
+    assert roles.count("follower") == sum(len(cs) - 1 for cs in multi)
+    assert roles.count("single") == len(groups) - len(multi)   # v0.1.0, lone dev cells
+    assert not [d for d in os.listdir(ctx["work_root"]) if d.startswith("upstream-")]  # snapshots removed
+
+
+def test_grouping_without_snapshot_runs_from_scratch(tmp_path):
+    _, calls, _ = _grouping_run(tmp_path, make_snapshot=False)
+    assert "follower" not in [u["role"] for _, u in calls]
+
+
+def test_no_group_runs_every_cell_alone(tmp_path):
+    _, calls, _ = _grouping_run(tmp_path, group=False)
+    assert {u["role"] for _, u in calls} == {"single"}
+
+
+def test_runtime_metrics_cpu_columns(tmp_path):
+    p = tmp_path / "run_log.json"
+    p.write_text(json.dumps({"reused_steps": ["filter", "map"], "steps": [
+        {"step": "filter:barcode01", "seconds": 1.0, "cpu_seconds": 0.5, "returncode": 0, "reused": True},
+        {"step": "filter:barcode02", "seconds": 1.0, "cpu_seconds": 0.25, "returncode": 0, "reused": True},
+        {"step": "map", "seconds": 2.0, "cpu_seconds": 6.0, "returncode": 0, "reused": True},
+        {"step": "blast_annot_batch", "seconds": 3.0, "cpu_seconds": 2.0, "returncode": 0}]}))
+    m = rg.runtime_metrics(str(p))
+    assert m["runtime.filter_cpu_s"] == 0.75 and m["runtime.map_cpu_s"] == 6.0
+    assert m["runtime.total_cpu_s"] == 8.75 and m["runtime.total_s"] == 7.0
+    assert m["run.upstream_reused"] == 1.0
+    p.write_text(json.dumps({"steps": [{"step": "map", "seconds": 2.0, "returncode": 0}]}))
+    m = rg.runtime_metrics(str(p))   # old run logs: no CPU columns
+    assert "runtime.total_cpu_s" not in m and m["run.upstream_reused"] == 0.0
+
+
+def test_full_preset_is_variation_sweeps():
+    cells = rg.expand_spec(copy.deepcopy(rg.PRESETS["full"]), PROFILES)
+    div = [c for c in cells if "is_divergence" in c["sweeps"]]
+    trunc = [c for c in cells if "is_truncation" in c["sweeps"]]
+    n_var = 1 + len(rg.EVALUES) * len(rg.BLAST_TASKS)   # v0.1.0 + every dev annotation setting
+    seeds = len(rg.PRESETS["full"]["seeds"])
+    assert len(div) == len(rg.IS_DIVERGENCES) * seeds * n_var
+    assert len(trunc) == len(rg.IS_TRUNCATIONS) * seeds * n_var
+    # divergence 0 is the accuracy sweep's centre point, not a separate dataset
+    zero = [c for c in div if "is_divergence" not in c["sim"]]
+    assert len(zero) == seeds * n_var and all("accuracy" in c["sweeps"] for c in zero)
+    assert {c["sim"].get("is_divergence") for c in div} == {None, 0.05, 0.10, 0.15, 0.20}
+    assert all(c["sim"]["is_truncate_frac"] == 0.5 for c in trunc)
+    cmd = rg.sim_command("py", trunc[0]["sim"], "/x")
+    i = cmd.index("--is_truncate")
+    assert cmd[i + 1:i + 3] in (["300", "600"], ["600", "1200"])
+
+
+# ---------------------------------------------------------------- grouping (real pipeline)
+@requires_tools
+def test_grouped_and_ungrouped_runs_give_identical_metrics(tmp_path):
+    spec = {"name": "grouping", "seeds": [1],
+            "refs": {k: os.path.join(TEST_DATA, f) for k, f in
+                     (("plasmid", "plasmid.fasta"), ("genome", "genome.fasta"), ("is_fasta", "IS_curated.fasta"))},
+            "sim_defaults": {"barcodes": 1, "reads": 200, "error_model": "ont", "ont_profile": "r9.4.1",
+                             "is_divergence": 0.15},
+            "pipelines": {"dev": {"checkout": "dev", "profile": "dev",
+                                  "settings": {"evalue": [1e-10], "blast_task": ["megablast", "dc-megablast"]},
+                                  "default_settings": {"evalue": 1e-10, "blast_task": "megablast"}}},
+            "sweeps": [{"name": "s", "pipelines": "all"}], "run": {"min_len": 2000, "tol": 20}}
+    sp = tmp_path / "spec.json"
+    sp.write_text(json.dumps(spec))
+    outs = {}
+    for mode, extra in (("grouped", []), ("ungrouped", ["--no_group"])):
+        out = tmp_path / mode
+        rg.main(["--spec", str(sp), "--out", str(out), "--work_root", str(tmp_path / f"work_{mode}"),
+                 "--jobs", "2", "--threads", "2", "--no_plot"] + extra)
+        outs[mode] = out
+    cells = rg.expand_spec(spec)
+    assert len(cells) == 2
+    roles = []
+    for c in cells:
+        res = {}
+        for mode, out in outs.items():
+            d = rg.cell_dir(str(out), c["cell_id"])
+            with open(os.path.join(d, "metrics.json")) as fh:
+                m = json.load(fh)["overall"]
+            m.pop("files", None)
+            with open(os.path.join(d, "per_read.tsv")) as fh:
+                res[mode] = (m, fh.read())
+            with open(os.path.join(d, "cell.json")) as fh:
+                info = json.load(fh)
+            if mode == "grouped":
+                roles.append(info["upstream"]["role"])
+                if info["upstream"]["role"] == "follower":
+                    assert info["upstream"]["reused"] is True
+            else:
+                assert info["upstream"]["role"] == "single"
+        assert res["grouped"] == res["ungrouped"], c["variant"]
+    assert sorted(roles) == ["follower", "lead"]
+    with open(outs["grouped"] / "grid_results.tsv") as fh:
+        rows = list(csv.DictReader(fh, delimiter="\t"))
+    assert all(float(r["runtime.total_cpu_s"]) > 0 for r in rows)
+    assert sorted(r["run.upstream_reused"] for r in rows) == ["0", "1"]
+    assert not [d for d in os.listdir(tmp_path / "work_grouped") if d.startswith("upstream-")]

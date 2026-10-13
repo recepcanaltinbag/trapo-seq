@@ -95,6 +95,37 @@ Sequencing errors (--error_model)
                      length), n_errors, n_sub, n_ins, n_del, n_hp_indel.
                      The ont path is O(errors) per read in Python, so it is
                      much faster than the uniform per-base loop.
+
+Curated-IS variation (--is_divergence, --is_truncate)
+-----------------------------------------------------
+By default an IS clone carries an exact copy of a curated IS. Two options make
+the inserted element differ from the database, per clone (every read of a clone
+shares the same modified copy, so this models a related-but-not-identical
+element in the sample, not sequencing error):
+  --is_truncate MIN MAX  a fraction --is_truncate_frac (default 0.5) of the IS
+                         clones carry only a piece of the IS, of length drawn
+                         uniformly from MIN-MAX bp (capped at the IS length) at
+                         a uniformly drawn offset.
+  --is_divergence F      the (possibly truncated) element gets substitutions and
+                         small indels at a per-base event rate F: each event is
+                         a substitution with probability 0.8, else an insertion
+                         or a deletion (equally likely) of 1-3 bp
+                         (IS_DIV_INDEL_SHARE, IS_DIV_MAX_INDEL). Truncation is
+                         applied first.
+Novel clones are never modified. All of this randomness comes from a separate
+random stream (seeded from --seed) that is created only when an option is
+enabled, so with the defaults (0 / off) every output is byte-identical to
+earlier versions. With --error_model ont the read structure (which clone,
+strand, fragment) is also unchanged when the options are on; the uniform model
+draws its per-base errors from the main stream, so there the reads after the
+first modified IS read differ. When enabled, clones.tsv and truth.tsv gain (empty for
+non-IS rows):
+  truncation  is_full_len (curated IS length), is_truncated (True/False),
+              is_kept_start, is_kept_end (kept interval on the forward curated
+              IS, 0-based half-open; the whole IS when not truncated)
+  divergence  is_divergence (realised: events / length of the source piece),
+              is_div_sub, is_div_ins, is_div_del (event counts)
+insert_len is the length of the element actually inserted.
 """
 
 import argparse
@@ -447,6 +478,56 @@ class OntErrorModel:
         return read, qual, stats
 
 
+IS_DIV_INDEL_SHARE = 0.2   # share of divergence events that are indels (half insertions, half deletions)
+IS_DIV_MAX_INDEL = 3       # divergence indel length is uniform in 1..IS_DIV_MAX_INDEL
+IS_TRUNC_FIELDS = ["is_full_len", "is_truncated", "is_kept_start", "is_kept_end"]
+IS_DIV_FIELDS = ["is_divergence", "is_div_sub", "is_div_ins", "is_div_del"]
+
+
+def truncate_element(rng, seq, min_len, max_len):
+    """A random piece of `seq` of length uniform in [min_len, max_len] (capped
+    at len(seq)). Returns (piece, start, end)."""
+    n = len(seq)
+    length = min(n, rng.randint(min_len, max_len))
+    start = rng.randint(0, n - length)
+    return seq[start:start + length], start, start + length
+
+
+def diverge_element(rng, seq, rate, indel_share=IS_DIV_INDEL_SHARE, max_indel=IS_DIV_MAX_INDEL):
+    """Apply substitutions and small indels at a per-base event rate `rate`.
+
+    Returns (new sequence, {"is_divergence": events / len(seq), "is_div_sub",
+    "is_div_ins", "is_div_del": event counts})."""
+    n = len(seq)
+    out, prev, i = [], 0, -1
+    ns = ni = nd = 0
+    if rate > 0 and n:
+        lp = math.log1p(-rate) if rate < 1 else None
+        rnd = rng.random
+        while True:
+            i += 1 if lp is None else 1 + int(math.log(1.0 - rnd()) / lp)
+            if i >= n:
+                break
+            u = rnd()
+            out.append(seq[prev:i])
+            if u < 1 - indel_share:                     # substitution
+                out.append(rng.choice([b for b in "ACGT" if b != seq[i]]))
+                prev = i + 1
+                ns += 1
+            elif u < 1 - indel_share / 2:               # insertion after seq[i]
+                out.append(seq[i] + random_seq(rng, rng.randint(1, max_indel)))
+                prev = i + 1
+                ni += 1
+            else:                                       # deletion starting at seq[i]
+                prev = min(n, i + rng.randint(1, max_indel))
+                i = prev - 1
+                nd += 1
+    out.append(seq[prev:])
+    stats = {"is_divergence": round((ns + ni + nd) / n, 5) if n else 0.0,
+             "is_div_sub": ns, "is_div_ins": ni, "is_div_del": nd}
+    return "".join(out), stats
+
+
 def skewed_weights(n, rng, alpha):
     """Pareto-like clone abundances: a few large clones, a long tail."""
     return [rng.paretovariate(alpha) for _ in range(n)]
@@ -667,9 +748,23 @@ def parse_args(argv=None):
     ap.add_argument("--homopolymer_factor", type=float, default=None,
                     help="ont mode: indel probability of a homopolymer run of length L>=3 is "
                          "(1-accuracy)*factor*(L-2) (r9.4.1 4, r10.4.1 5; 0 disables)")
+    ap.add_argument("--is_divergence", type=float, default=0.0,
+                    help="Per-base rate of substitutions + small indels applied to each IS clone's element "
+                         "(one divergent copy per clone; default 0 = exact database copy)")
+    ap.add_argument("--is_truncate", type=int, nargs=2, default=None, metavar=("MIN", "MAX"),
+                    help="Truncate the element of a fraction (--is_truncate_frac) of IS clones to a random "
+                         "piece of MIN-MAX bp (default: off)")
+    ap.add_argument("--is_truncate_frac", type=float, default=0.5,
+                    help="With --is_truncate: fraction of IS clones that are truncated (default 0.5)")
     ap.add_argument("--tsd", nargs="*", default=[], metavar="FAMILY=LEN", help="Override TSD lengths, e.g. IS4=10 Tn3=5")
     ap.add_argument("--seed", type=int, default=1, help="Random seed (default 1)")
     args = ap.parse_args(argv)
+    if not 0 <= args.is_divergence < 1:
+        ap.error("--is_divergence must be in [0, 1)")
+    if args.is_truncate is not None and not 0 < args.is_truncate[0] <= args.is_truncate[1]:
+        ap.error("--is_truncate needs 0 < MIN <= MAX")
+    if not 0 <= args.is_truncate_frac <= 1:
+        ap.error("--is_truncate_frac must be in [0, 1]")
     if args.error_model == "ont":
         for k, v in ONT_PROFILES[args.ont_profile].items():
             if getattr(args, k) is None:
@@ -707,6 +802,9 @@ def main(argv=None):
         ont = make_ont_model(args) if args.error_model == "ont" else None
     except ValueError as exc:
         sys.exit(f"ONT error model: {exc}")
+    # IS variation: own random stream, created only when enabled (defaults stay byte-identical)
+    var_fields = (IS_TRUNC_FIELDS if args.is_truncate else []) + (IS_DIV_FIELDS if args.is_divergence > 0 else [])
+    vrng = random.Random(f"is-variation-{args.seed}") if var_fields else None
     os.makedirs(args.out_dir, exist_ok=True)
     elements = []
     if args.novel_mode == "element":
@@ -716,9 +814,10 @@ def main(argv=None):
                     "genome_contig", "genome_start", "genome_end", "read_strand", "fragmented", "read_len"]
     if ont is not None:
         truth_fields += ONT_TRUTH_FIELDS
+    truth_fields += var_fields
     clone_fields = ["barcode", "clone_id", "category", "element", "element_family", "ref_pos",
                     "orientation", "tsd_len", "tsd_seq", "insert_len", "genome_contig",
-                    "genome_start", "genome_end", "weight", "n_reads"]
+                    "genome_start", "genome_end", "weight", "n_reads"] + var_fields
     truth_fh = open(os.path.join(args.out_dir, "truth.tsv"), "w", newline="")
     clone_fh = open(os.path.join(args.out_dir, "clones.tsv"), "w", newline="")
     truth = csv.DictWriter(truth_fh, truth_fields, delimiter="\t")
@@ -760,13 +859,26 @@ def main(argv=None):
                 tsd_len = tsd_table.get(fam, FALLBACK_TSD)
                 category = "is_insertion"
                 gcoords = ("", "", "")
+            var = {f: "" for f in var_fields}
+            if vrng is not None and category == "is_insertion":
+                if args.is_truncate:
+                    full = len(element)
+                    cut_it = vrng.random() < args.is_truncate_frac
+                    if cut_it:
+                        element, ks, ke = truncate_element(vrng, element, *args.is_truncate)
+                    else:
+                        ks, ke = 0, full
+                    var.update(is_full_len=full, is_truncated=cut_it, is_kept_start=ks, is_kept_end=ke)
+                if args.is_divergence > 0:
+                    element, dstats = diverge_element(vrng, element, args.is_divergence)
+                    var.update(dstats)
             construct, tsd = build_construct(plasmid, pos, element, orient, tsd_len)
             clones.append({
                 "barcode": bc, "clone_id": cid, "category": category, "element": name,
                 "element_family": fam, "ref_pos": pos, "orientation": orient,
                 "tsd_len": tsd_len, "tsd_seq": tsd, "insert_len": len(element),
                 "genome_contig": gcoords[0], "genome_start": gcoords[1], "genome_end": gcoords[2],
-                "weight": 0.0, "n_reads": 0, "_construct": construct,
+                "weight": 0.0, "n_reads": 0, **var, "_construct": construct,
             })
         weights = skewed_weights(len(clones), rng, alpha=1.2)
         total_w = sum(weights)
@@ -802,6 +914,7 @@ def main(argv=None):
                                                        "orientation", "tsd_len", "tsd_seq", "insert_len",
                                                        "genome_contig", "genome_start", "genome_end")})
                     rec["element"] = clone["element"]
+                    rec.update({k: clone[k] for k in var_fields})
                 else:
                     mol = linearise(plasmid, cut, None, 0)
                     rec.update(category="empty_plasmid")
@@ -837,6 +950,12 @@ def main(argv=None):
     clone_fh.close()
     with open(os.path.join(args.out_dir, "simulation.json"), "w") as fh:
         params = dict(vars(args))
+        # keep simulation.json identical to earlier versions when IS variation is off
+        if args.is_divergence == 0:
+            params.pop("is_divergence")
+        if args.is_truncate is None:
+            params.pop("is_truncate")
+            params.pop("is_truncate_frac")
         if args.novel_mode == "segment":
             # keep simulation.json identical to earlier versions in the default mode
             for k in ("novel_mode", "n_novel_elements", "element_len", "tir_len", "tir_mismatch",

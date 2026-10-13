@@ -14,6 +14,23 @@ For every *cell* (one simulated dataset + one pipeline variant) the driver
      the simulated FASTQ once every cell of that dataset is done) unless --keep,
 and finally aggregates all finished cells into tidy tables and figures.
 
+Shared upstream steps (default; --no_group runs every cell from scratch)
+-----------------------------------------------------------------------
+Cells with the same simulation, checkout, profile, tag and run options differ
+only in blast_annot_batch settings, so filter + map + insert_finder_batch are
+identical for them. execute() groups such cells: the first unfinished cell of
+a group (lead) runs from scratch with run_benchmark --snapshot_after
+insert_finder_batch WORK_ROOT/upstream-<group>; once it has finished, every
+other cell (follower) gets a copy of that snapshot as its work dir (APFS clone
+on macOS) and runs run_benchmark --from_step blast_annot_batch. run_benchmark
+checks the snapshot's stamp (same sim, checkout commit + uncommitted-code hash,
+upstream commands, options) and its file manifest; if it refuses (exit 3),
+the follower runs from scratch. Results are identical to ungrouped runs
+(tests/test_run_grid.py checks this). A follower's run_log.json carries the
+lead's upstream step records ("reused": true), so runtime.* still describes a
+full pipeline run; cell.json "upstream" and run.upstream_reused say which
+cells reused. Followers run after their lead, other groups in parallel.
+
 Grid specification
 ------------------
 A Python dict (PRESETS below) or a JSON file with the same keys:
@@ -66,13 +83,33 @@ Layout under --out (default publication/benchmark/grid/):
                             retried on the next invocation.
   grid_results.tsv          tidy: one row per cell, parameters + every numeric
                             metric of metrics.json["overall"] (dotted names as
-                            in summary.tsv) + derived.* + runtime.*
+                            in summary.tsv) + derived.* + runtime.*:
+                            runtime.<step>_s wall time, runtime.<step>_cpu_s
+                            user+sys CPU time of the step's child processes
+                            (all threads; from run_benchmark), runtime.total_s,
+                            runtime.total_cpu_s, run.upstream_reused
   summary_long.tsv          mean, sd, n over seeds for every metric
   summary_key.tsv           "mean ± sd" for the key paper metrics
   figures/                  plot_grid.py output (PDF + PNG)
 
 Work directories go to --work_root (default: a folder in the system temp dir).
 It must not contain spaces when v0.1.0 is in the grid (AUDIT B18).
+
+Size and time of the full preset
+--------------------------------
+549 cells from 96 simulations (3 seeds): accuracy 7 x 9 variants, chemistry_r10
+1 x 9, insertion_rate 5 x 2, depth 5 x 2, novel_fraction 4 x 2, fragmentation
+4 x 2, novel_len 3 x 9, is_divergence 5 x 9 (0 = accuracy centre),
+is_truncation 2 x 9 (per seed; 9 = v0.1.0 + 4 E-values x 2 BLAST tasks;
+cells shared between sweeps run once). Before the IS sweeps: 387 cells, 78
+simulations. Indicative cost on an Apple-silicon laptop, dev, 2000 reads,
+--threads 4: ~20 s per cell from scratch (filter+map+insert_finder ~13.5 s,
+annotation + DR ~5-9 s, evaluation ~3 s), ~11-14 s per grouped follower.
+Scaling by reads (depth sweep up to 10000), the whole grid is ~3.8 h of
+serial cell time ungrouped and ~2.5 h grouped (192 upstream groups;
+~35 % saved), roughly halved with --jobs 2 on a machine with >= 8 free cores.
+v0.1.0 cells were assumed to cost the same as dev. Measure on a quiet
+machine before quoting runtimes.
 
 derived.* metrics (computed here from per_read.tsv, so they do not depend on
 evaluate.py's summary): among true insertion reads that the insert finder
@@ -107,11 +144,16 @@ DEFAULT_OUT = os.path.join(REPO, "publication", "benchmark", "grid")
 BASELINE_COMMIT = "980d5e6"
 INSERTION_CATS = ("is_insertion", "novel_insertion")
 STEP_NAMES = ("filter", "map", "insert_finder_batch", "blast_annot_batch", "dr_finder")
+UPSTREAM_LAST_STEP = "insert_finder_batch"   # last step shared by a group's cells
+REUSE_FROM_STEP = "blast_annot_batch"        # first step that depends on the annotation settings
+REUSE_MISMATCH_RC = 3                        # run_benchmark: reused work dir refused
 NA = "NA"
 
 ACCURACIES = [0.99, 0.97, 0.95, 0.92, 0.90, 0.87, 0.85]
 EVALUES = [1e-5, 1e-10, 1e-20, 1e-50]
 BLAST_TASKS = ["megablast", "dc-megablast"]
+IS_DIVERGENCES = [0.0, 0.05, 0.10, 0.15, 0.20]
+IS_TRUNCATIONS = [[300, 600], [600, 1200]]
 
 _COMMON = {
     "refs": {"plasmid": "test-data/plasmid.fasta", "genome": "test-data/genome.fasta",
@@ -146,6 +188,11 @@ PRESETS = {
                       "pipelines": "default"},
                      {"name": "novel_len", "sim": {"novel_len": [[300, 600], [600, 1200], [1200, 3000]]},
                       "set": {"novel_fraction": 0.5}, "pipelines": "all"},
+                     # curated IS vs a related-but-not-identical element in the sample
+                     # (0 is the accuracy sweep's centre point and is shared with it)
+                     {"name": "is_divergence", "sim": {"is_divergence": IS_DIVERGENCES}, "pipelines": "all"},
+                     {"name": "is_truncation", "sim": {"is_truncate": IS_TRUNCATIONS},
+                      "set": {"is_truncate_frac": 0.5}, "pipelines": "all"},
                  ]),
     # Smoke test: 2 accuracies x 1 seed x 300 reads, both checkouts, 2 E-values.
     "smoke": dict(copy.deepcopy(_COMMON), name="smoke", seeds=[1],
@@ -163,7 +210,7 @@ KEY_METRICS = [
     "classification.is_insertion.accuracy", "classification.novel_insertion.accuracy",
     "derived.true_ins.pct_Contamination", "derived.true_ins.pct_Unannotated",
     "sites.event_recall", "sites.site_precision",
-    "tsd.length_accuracy", "tsd.consistent_accuracy", "runtime.total_s",
+    "tsd.length_accuracy", "tsd.consistent_accuracy", "runtime.total_s", "runtime.total_cpu_s",
 ]
 
 _print_lock = threading.Lock()
@@ -199,8 +246,14 @@ def load_simulator_profiles():
 
 
 def resolve_sim_params(params, ont_profiles=None):
-    """Drop nulls and resolve read_accuracy_sd = "scaled:F"."""
+    """Drop nulls and options at their 'off' value (is_divergence 0, so such
+    cells are identical to cells without the option) and resolve
+    read_accuracy_sd = "scaled:F"."""
     p = {k: v for k, v in params.items() if v is not None}
+    if p.get("is_divergence") == 0:
+        del p["is_divergence"]
+    if "is_truncate" not in p:
+        p.pop("is_truncate_frac", None)
     sd = p.get("read_accuracy_sd")
     if isinstance(sd, str) and sd.startswith("scaled:"):
         mean = p.get("read_accuracy_mean")
@@ -423,8 +476,35 @@ def blast_steps_json(profile, settings):
     return {"blast_annot_batch": tmpl}
 
 
+def group_key(cell):
+    """Cells with the same key share filter + map + insert_finder_batch: same
+    simulation, checkout, profile, tag and run options; they differ only in
+    the blast_annot_batch settings."""
+    p = cell["pipeline"]
+    return stable_hash({"sim_id": cell["sim_id"], "checkout": p["checkout"], "profile": p["profile"],
+                        "tag": p.get("tag", ""), "run": cell["run"]})
+
+
+def snapshot_dir(ctx, key):
+    return os.path.join(ctx["work_root"], f"upstream-{key}")
+
+
+def _run_benchmark_mod():
+    sys.path.insert(0, HERE)
+    import run_benchmark  # noqa: E402
+    return run_benchmark
+
+
 def run_cell(cell, ctx):
-    """Run run_benchmark.py for one cell. Returns 'done' or raises."""
+    """Run run_benchmark.py for one cell. Returns 'done' or raises.
+
+    ctx["upstream"][cell_id] (set by execute() when grouping) is
+      {"role": "lead", "snapshot": DIR}      run from scratch and copy the work
+                                              dir to DIR after insert_finder_batch
+      {"role": "follower", "snapshot": DIR}  copy DIR to the work dir and run from
+                                              blast_annot_batch (falls back to a
+                                              fresh run if the snapshot is refused)
+    """
     out = ctx["out"]
     final = cell_dir(out, cell["cell_id"])
     partial, failed = final + ".partial", final + ".failed"
@@ -446,15 +526,39 @@ def run_cell(cell, ctx):
         with open(sj, "w") as fh:
             json.dump(steps, fh, indent=2)
         cmd += ["--steps_json", sj]
+    up = (ctx.get("upstream") or {}).get(cell["cell_id"])
+    upinfo = {"role": "single"}
+    if up and up["role"] == "lead":
+        cmd += ["--snapshot_after", UPSTREAM_LAST_STEP, up["snapshot"]]
+        upinfo = {"role": "lead", "snapshot": up["snapshot"]}
     t0 = time.time()
     with open(os.path.join(partial, "runner.log"), "w") as fh:
-        fh.write("$ " + " ".join(cmd) + "\n\n")
-        fh.flush()
-        p = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, env=ctx["env"])
+        p = None
+        if up and up["role"] == "follower":
+            tc = time.time()
+            upinfo = {"role": "follower", "snapshot": up["snapshot"], "reused": False}
+            try:
+                _run_benchmark_mod().copy_work(up["snapshot"], work)
+            except Exception as e:  # snapshot vanished / disk full: run from scratch
+                fh.write(f"# copying the upstream snapshot failed ({e}); running from scratch\n\n")
+            else:
+                upinfo["copy_seconds"] = round(time.time() - tc, 2)
+                rcmd = cmd + ["--from_step", REUSE_FROM_STEP]
+                fh.write("$ " + " ".join(rcmd) + "\n\n")
+                fh.flush()
+                p = subprocess.run(rcmd, stdout=fh, stderr=subprocess.STDOUT, env=ctx["env"])
+                upinfo["reused"] = p.returncode != REUSE_MISMATCH_RC
+                if not upinfo["reused"]:
+                    fh.write("\n# upstream snapshot refused (see above); running from scratch\n\n")
+                    p = None
+        if p is None:
+            fh.write("$ " + " ".join(cmd) + "\n\n")
+            fh.flush()
+            p = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, env=ctx["env"])
     rec = {"cell_id": cell["cell_id"], "sim_id": cell["sim_id"], "variant": cell["variant"],
            "sweeps": cell["sweeps"], "params": {"sim": cell["sim"], "pipeline": pipe, "run": cell["run"]},
            "checkout": ctx["checkouts"].get(pipe["checkout"]), "tools": ctx["tools"],
-           "threads": ctx["threads"], "returncode": p.returncode,
+           "threads": ctx["threads"], "returncode": p.returncode, "upstream": upinfo,
            "wall_seconds": round(time.time() - t0, 1),
            "finished": datetime.datetime.now().isoformat(timespec="seconds")}
     with open(os.path.join(partial, "cell.json"), "w") as fh:
@@ -506,16 +610,60 @@ def execute(cells, ctx, run_cell_fn=run_cell, run_sim_fn=run_simulation):
         if not sim_ok.get(c["sim_id"]):
             status[c["cell_id"]] = "failed (simulation)"
     n = len(runnable)
+    # Grouping: cells that differ only in annotation settings share the upstream
+    # steps; the first cell of a group (lead) runs from scratch and snapshots its
+    # work dir after insert_finder_batch, the others (followers) start from a
+    # copy of that snapshot once the lead has finished.
+    groups = {}
+    for c in runnable:
+        groups.setdefault(group_key(c) if ctx.get("group", True) else c["cell_id"], []).append(c)
+    ctx["upstream"] = plan = {}
+    waiting, left = {}, {}
+    for key, cs in groups.items():
+        if len(cs) > 1:
+            snap = snapshot_dir(ctx, key)
+            if os.path.exists(snap):
+                shutil.rmtree(snap, ignore_errors=True)
+            plan[cs[0]["cell_id"]] = {"role": "lead", "snapshot": snap, "group": key}
+            waiting[key] = cs[1:]
+    if waiting:
+        log(f"grouping: {len(groups)} upstream groups for {n} cells "
+            f"({n - len(groups)} cells start from a shared insert_finder_batch snapshot)")
+    i = 0
     with cf.ThreadPoolExecutor(max_workers=ctx["jobs"]) as ex:
-        futs = {ex.submit(run_cell_fn, c, ctx): c for c in runnable}
-        for i, f in enumerate(cf.as_completed(futs), 1):
-            c = futs[f]
-            try:
-                status[c["cell_id"]] = f.result()
-                log(f"[{i}/{n}] {c['cell_id']} {c['variant']} acc={c['accuracy_nominal']} seed={c['sim']['seed']} done")
-            except Exception as e:
-                status[c["cell_id"]] = "failed"
-                log(f"[{i}/{n}] ERROR {e}")
+        futs = {}
+        for key, cs in groups.items():
+            for c in ([cs[0]] if key in waiting else cs):
+                futs[ex.submit(run_cell_fn, c, ctx)] = c
+        while futs:
+            done, _ = cf.wait(futs, return_when=cf.FIRST_COMPLETED)
+            for f in done:
+                c = futs.pop(f)
+                i += 1
+                try:
+                    status[c["cell_id"]] = f.result()
+                    log(f"[{i}/{n}] {c['cell_id']} {c['variant']} acc={c['accuracy_nominal']} "
+                        f"seed={c['sim']['seed']} done")
+                except Exception as e:
+                    status[c["cell_id"]] = "failed"
+                    log(f"[{i}/{n}] ERROR {e}")
+                role = plan.get(c["cell_id"], {})
+                key = role.get("group")
+                if role.get("role") == "lead":
+                    snap = role["snapshot"]
+                    usable = os.path.exists(os.path.join(snap, ".run_benchmark_stamp.json"))
+                    left[key] = len(waiting[key])
+                    for fc in waiting.pop(key):
+                        if usable:
+                            plan[fc["cell_id"]] = {"role": "follower", "snapshot": snap, "group": key}
+                        futs[ex.submit(run_cell_fn, fc, ctx)] = fc
+                    if not usable:
+                        left.pop(key)
+                        shutil.rmtree(snap, ignore_errors=True)
+                elif role.get("role") == "follower":
+                    left[key] -= 1
+                    if left[key] == 0 and not ctx["keep"]:
+                        shutil.rmtree(role["snapshot"], ignore_errors=True)
     if not ctx["keep"]:
         # Simulated FASTQ is regenerable from the parameters; drop it once all cells of a sim are finished.
         for sid in sims:
@@ -598,16 +746,25 @@ def runtime_metrics(run_log_json):
     with open(run_log_json) as fh:
         rl = json.load(fh)
     t = {s: 0.0 for s in STEP_NAMES}
+    cpu = {s: 0.0 for s in STEP_NAMES}
+    have_cpu = False
     failed = []
     for st in rl.get("steps", []):
         name = st.get("step", "").split(":")[0]
         if name in t:
             t[name] += st.get("seconds") or 0.0
+            if st.get("cpu_seconds") is not None:
+                have_cpu = True
+                cpu[name] += st["cpu_seconds"]
         if st.get("returncode") or st.get("traceback_in_log"):
             failed.append(st.get("step"))
     out = {f"runtime.{k}_s": v for k, v in t.items()}
     out["runtime.total_s"] = sum(t.values())
+    if have_cpu:  # run logs written before CPU time was recorded have none
+        out.update({f"runtime.{k}_cpu_s": v for k, v in cpu.items()})
+        out["runtime.total_cpu_s"] = sum(cpu.values())
     out["run.failed_steps"] = float(len(failed))
+    out["run.upstream_reused"] = 1.0 if rl.get("reused_steps") else 0.0
     return out
 
 
@@ -800,7 +957,11 @@ def main(argv=None):
     ap.add_argument("--jobs", type=int, default=2, help="Cells run in parallel (default 2)")
     ap.add_argument("--threads", type=int, default=4, help="Threads per pipeline run (default 4)")
     ap.add_argument("--seeds", type=int, nargs="+", help="Override the spec's seeds")
-    ap.add_argument("--keep", action="store_true", help="Keep work dirs (BAM/FASTQ) and simulated FASTQ")
+    ap.add_argument("--keep", action="store_true",
+                    help="Keep work dirs (BAM/FASTQ), upstream snapshots and simulated FASTQ")
+    ap.add_argument("--no_group", action="store_true",
+                    help="Run every cell from scratch (do not share map + insert_finder between "
+                         "cells that differ only in annotation settings)")
     ap.add_argument("--max_cells", type=int, default=0, help="Run at most N unfinished cells this time")
     ap.add_argument("--dry_run", action="store_true", help="List cells and their status, run nothing")
     ap.add_argument("--aggregate_only", action="store_true", help="Only aggregate finished cells (and plot)")
@@ -828,7 +989,7 @@ def main(argv=None):
 
     env = dict(os.environ, MPLBACKEND="Agg", PYTHONDONTWRITEBYTECODE="1")
     ctx = {"out": out, "python": args.python, "jobs": max(1, args.jobs), "threads": args.threads,
-           "keep": args.keep, "max_cells": args.max_cells, "env": env,
+           "keep": args.keep, "max_cells": args.max_cells, "env": env, "group": not args.no_group,
            "work_root": os.path.abspath(args.work_root), "baseline_checkout": os.path.abspath(args.baseline_checkout)}
     status = {}
     if not args.aggregate_only:

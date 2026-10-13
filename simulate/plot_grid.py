@@ -16,8 +16,10 @@ Figures (PDF + PNG each; mean over seeds, band/error bar = ± 1 SD):
                                  series are dodged by 0.12 % on x so equal ones
                                  do not hide each other
   fig4_tsd_vs_accuracy           TSD exact-length and consistent-repeat accuracy
-  fig5_runtime                   per-step and total wall time (INDICATIVE: shared
-                                 machine, see run_grid.py manifest for threads)
+  fig5_runtime                   per-step and total CPU time (user + sys of the
+                                 step's child processes; wall time for grids run
+                                 before CPU time was recorded). INDICATIVE: shared
+                                 machine, see run_grid.py manifest for threads
 
 x axis: nominal mean read accuracy of the ONT model (accuracy sweep, r9.4.1-like
 composition). Cells of the chemistry_r10 sweep (R10.4.1 preset) are drawn as
@@ -233,29 +235,34 @@ def runtime_figure(df, dev_default, out_dir):
     acc = in_sweep(df, "accuracy")
     series = series_frames(acc, dev_default)
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(9, 3.3), gridspec_kw={"width_ratios": [1.4, 1]})
-    steps = [s for s in STEP_ORDER if f"runtime.{s}_s" in df]
+    # prefer CPU time (less sensitive to other jobs on the machine) when the grid recorded it
+    cpu = "runtime.total_cpu_s" in df and df["runtime.total_cpu_s"].notna().any()
+    sfx, total, ylab = ("_cpu_s", "runtime.total_cpu_s", "CPU time (s)") if cpu else \
+        ("_s", "runtime.total_s", "Wall time (s)")
+    steps = [s for s in STEP_ORDER if f"runtime.{s}{sfx}" in df]
     width = 0.8 / max(1, len(series))
     for k, (lab, col, mk, ls, fr) in enumerate(series):
-        means = [fr[f"runtime.{s}_s"].mean() for s in steps]
-        sds = [fr[f"runtime.{s}_s"].std() if fr[f"runtime.{s}_s"].count() > 1 else 0 for s in steps]
+        means = [fr[f"runtime.{s}{sfx}"].mean() for s in steps]
+        sds = [fr[f"runtime.{s}{sfx}"].std() if fr[f"runtime.{s}{sfx}"].count() > 1 else 0 for s in steps]
         xs = [i + (k - (len(series) - 1) / 2) * width for i in range(len(steps))]
         a1.bar(xs, means, width=width * 0.92, color=col, yerr=sds, capsize=2, label=lab,
                error_kw={"ecolor": INK2, "elinewidth": 0.8}, hatch="//" if ls == "--" else None,
                edgecolor="white", linewidth=0.5)
-        draw_series(a2, fr, "runtime.total_s", col, mk, ls, lab)
+        draw_series(a2, fr, total, col, mk, ls, lab)
     a1.set_xticks(range(len(steps)))
     a1.set_xticklabels([s.replace("_batch", "").replace("_", " ") for s in steps], rotation=20, ha="right")
-    a1.set_ylabel("Wall time (s)")
+    a1.set_ylabel(ylab)
     a1.set_title("Per step (mean ± SD over accuracy-sweep cells)", loc="left")
     a1.grid(axis="x", visible=False)
-    finish_axis(a2, "Total vs read accuracy", "Wall time (s)")
+    finish_axis(a2, "Total vs read accuracy", ylab)
     a2.set_ylim(bottom=0)
     h, labels = a1.get_legend_handles_labels()
     if h:
         fig.legend(h, labels, loc="upper center", ncol=len(h), frameon=False, bbox_to_anchor=(0.5, 1.06))
     fig.tight_layout()
     threads = df["threads"].dropna().unique() if "threads" in df else []
-    note = ("Runtimes are INDICATIVE: measured on a shared workstation with parallel cells "
+    note = (("CPU time = user + system time of the pipeline's child processes, summed over threads. " if cpu else "")
+            + "Runtimes are INDICATIVE: measured on a shared workstation with parallel cells "
             f"(threads per run: {', '.join(str(int(t)) for t in threads) or '?'}); time on a quiet machine for the paper.")
     return save(fig, out_dir, "fig5_runtime", note)
 
