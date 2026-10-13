@@ -37,8 +37,8 @@
 
 ## Requirements
 **For all modules:**
-- [Linux]()
-- [Python]() (>v3.5) (For all modules)
+- Linux or macOS
+- Python ≥ 3.9
 
 **Libraries:**
 - [matplotlib]() (read_histogram, heatmap, dr_logo, in_del_plot, kde_mobile, map_dist)
@@ -48,15 +48,13 @@
 - [numpy]() (heatmap, dr_logo)
 - [pysam]() (insert_finder_batch, in_del_plot, kde_mobile, map_dist)
 - [logomaker]() (dr_logo)
-### **Option 1:** Using pip
-
+### **Option 1:** Using conda **(recommended)** — installs Python libraries and external programs
 ```
-pip install matplotlib biopython pandas seaborn numpy pysam logomaker
-```
-### **Option 2:** Using conda **(recommended)**
-```
-conda create -n trapo-seq-env python=3.8 -y
+conda env create -f environment.yml
 conda activate trapo-seq-env
+```
+### **Option 2:** Using pip (external programs below must be installed separately)
+```
 pip install matplotlib biopython pandas seaborn numpy pysam logomaker
 ```
 
@@ -74,6 +72,9 @@ After installation, run the **test** module below, If you don't see any errors i
 conda activate trapo-seq-env
 python trapo-seq.py test
 ```
+trapo-seq can be started from any directory (e.g. `python ~/tools/trapo-seq/trapo-seq.py ...`), and paths may contain spaces.
+
+Developers can run the unit and end-to-end tests with `python -m pytest tests/`, and benchmark the pipeline on simulated data with known truth using `simulate/simulate_traposome.py`, `simulate/run_benchmark.py` and `simulate/evaluate.py`.
 
 # Usage
 
@@ -113,13 +114,13 @@ It is essential to filter shorter reads because they are not helpful most of the
 
 ### Requirements
 - Basecalled and barcode demultiplexed .fastq files
-- If you want to filter only length-based (you do not need an external program like [FiltLong](https://github.com/rrwick/Filtlong)) you can use **read_histogram** module:
+- If you want to filter only length-based (you do not need an external program like [FiltLong](https://github.com/rrwick/Filtlong)) you can use the **filter** module:
 
 ```
-python trapo-seq.py filter -f data/barcode01/barcode01_raw.fastq -o data/barcode01/barcode01_filtered -l 2000
+python trapo-seq.py filter -f data/barcode01/barcode01_raw.fastq -o data/barcode01/barcode01.fastq -l 2000
 ```
 - **-f** fastq file path
-- **-o** output file path
+- **-o** output file path (the **map** module expects `<folder>/<folder>.fastq`, e.g. `barcode01/barcode01.fastq`)
 - **-l** filtering threshold 
 
 
@@ -219,13 +220,19 @@ makeblastdb -version
 ```
 
 ```
-python trapo-seq.py blast_annot_batch -d data -g data/genome.fasta --is_fasta data/IS_curated.fasta --threads 12 --no_temp
+python trapo-seq.py blast_annot_batch -d data -g data/genome.fasta --is_fasta data/IS_curated.fasta --threads 12
 ```
 - **-d** directory which barcode folders having tab files (*insertion_from_bam.tab)
 - **-g** genome sequence data path (*.fasta)
 - **--is_fasta** manually curated and labeled ISes (*.fasta) Sequence IDs must be in the format (>ISfamily_ISName) such as (IS5_ISPs1). Please have a look [Manually curated Transposons](#manually-curated-transposons)
 - **--threads** how many threads can be possible (default 2)
-- **--no_temp** do not delete temp files, can be helpful for debugging 
+- **--evalue** BLAST E-value cutoff (default 1e-10)
+- **--blast_task** `megablast` (default), `dc-megablast` (more sensitive for divergent inserts, slower) or `blastn`
+- **-t / --threshold** minimum % of the insert covered by a curated IS to call it **IS_DB** (default 70)
+- **--temp** temp directory (default `<input_dir>/temp`)
+- **--keep_temp** keep temporary BLAST files and databases, can be helpful for debugging
+
+Each insertion is classified once, so the table has **one row per insertion**: the best curated IS if it covers at least `--threshold` % of the insert (**IS_DB**), otherwise the best genome hit (**Genome**), otherwise **Contamination**.
 
 The output of this module is a tabular file (*best_alignment.tab) in the format of:
 
@@ -258,11 +265,17 @@ An example output file (*.rcp) of this module:
   - **?** -> number of transposons
   - **IS_Family, IS_Name, %, #** -> IS Family, IS Name, Percentage, Count 
   - **---** -> splitting conditions
+  - **#** -> metadata: total insertions and their IS_DB / Genome / Contamination breakdown. Percentages are relative to IS_DB insertions; insertions (not BLAST rows) are counted.
 ```
 is_stats.rcp:
 
 >barcode01
 ?40
+#total_insertions=52
+#IS_DB=40
+#Genome=9
+#Contamination=3
+#percentage_denominator=IS_DB
 IS5, ISPa41, 50.00, 20
 IS3, ISPen2, 25.00, 10
 IS5, ISPs1, 25.00, 10
@@ -306,14 +319,21 @@ python trapo-seq.py dr_finder -d data -p data/plasmid.fasta
 ```
 - **-d** directory which barcode folders having tab files (best_alignment.tab)
 - **-p** trap plasmid sequence (.fasta)
+- **--is_fasta** curated IS FASTA (optional); IS lengths sharpen DR boundaries for IS_DB insertions
+- **-g / --gap** flank bases taken from the read on each side of the insertion (default 500)
+- **-t / --threshold** max distance (bp) between a plasmid flank and the insertion edge on the read (default 200)
+- **-r / --repeat_threshold** max DR length (default 30)
+- **--threads** BLAST threads (default 2)
 
-An example output of DR Finder module (insertions.csv):
+The plasmid is treated as circular, so DRs across the origin are found. An example output of DR Finder module (`insertions/<sample>_insertions.csv`, one row per insertion; plasmid coordinates are 1-based):
 
-| Read ID	| Subject ID	| Query Start |	Query End |	Start Subject	| End Subject	| Insertion Point |	Repeat Length	| Overlap Sequence |
-|----------|------------|-----------------|---------------|----------------|-------------|----------------|---------------|-------------|
-| read1	| IS5_IS15 |    	8726	         | 9883	         | 4854	           | 4856        |	4854         |	3           |	CTA |
-| read2	| no blast hit	|5416	            |6742           |	4839	         | 4850	       | 4839         |	12	         | TGCTTGGTTATG |
+| Read ID	| Subject ID	| Query Start CSV |	Query End CSV |	Start Subject	| End Subject	| Insertion Point |	Repeat Length	| Overlap Sequence | Read Strand | Status |
+|----------|------------|-----------------|---------------|----------------|-------------|----------------|---------------|-------------|------|------|
+| read1	| IS5_IS15 |    	8726	         | 9883	         | 4854	           | 4856        |	4854         |	3           |	CTA | + | DR |
+| read2	| no blast hit	|5416	            |6742           |	4839	         | 4850	       | 4839         |	12	         | TGCTTGGTTATG | - | DR |
 </br>
+
+**Repeat Length** is signed: positive = direct repeat, 0 = blunt insertion (`no_duplication`), negative = target-site deletion (`target_site_deletion`). Other **Status** values: `repeat_too_long`, `left_flank_only`, `right_flank_only`, `no_flank_hit`, `strand_conflict`.
 
 ## DR Sequence Logos
 
@@ -327,9 +347,10 @@ mafft --version
 ```
 python trapo-seq.py dr_logo -d data/insertions -p data/plasmid.fasta -o data/dr_logos
 ```
-- **-d** directory which barcode folders having tab files (best_alignment.tab)
-- **-o** output pdf heatmap graph file (.pdf)
-- **-t** output file (*.tsv) (to summarize heatmap data)
+- **-d** folder with the DR finder outputs (`<data>/insertions`)
+- **-p** trap plasmid sequence (.fasta)
+- **-o** output folder for logos and insertion-coordinate plots
+- **-g / --gap_threshold** max % gaps per alignment column kept in the logo (default 60)
 
 Conservation of overlapping regions can reveal direct repeats and insertion point's specificity of transposons. To reveal the conservation of direct repeats; sequence logos with aligning the overlapping regions are made in this module for each transposon identified in the previous modules. The length of the logo depends on the alignment length*.
 
@@ -338,7 +359,7 @@ An example output for one of the transposon:
 ![example_sequence_logo](/images/example_sequence_logo.png)
 **Figure 3:** As an example, TGCTTGGTTATG is a 12 bp insertion site for this transposon (**TGCTTGGTT** is highly conserved). The closest transposon in ISFinder has DR as TGCTGAATT (close but different), so new insertion points can be found with the help of [**trapo-seq**](https://github.com/recepcanaltinbag/trapo-seq).
 
-*(for DR alignments of each transposon; most common length is chosen)
+*(DRs of equal length are used as they are; mixed lengths are aligned with MAFFT and only columns with at most `--gap_threshold` % gaps are kept)
 
 
 ![example_insertion_points](/images/example_insertion_points.png)
@@ -369,7 +390,7 @@ python trapo-seq.py in_del_plot -i data/barcode01/insertion_from_bam.tab -b data
 ```
 - **-i** insertion file (.tab)
 - **-b** bam file with prefix: 03*.bam
-- **-o** output name (.pdf)
+- **-o** output name; writes `<name>_non-weighted.pdf` and `<name>_weighted.pdf` next to the BAM
 
 An example output:
 
@@ -389,6 +410,9 @@ python trapo-seq.py map_dist -b data/barcode01/03_sorted_mapped_to_plasmid.bam -
 ```
 - **-b** bam file with prefix: 03*.bam
 - **-o** output name (.pdf)
+- **-f / --fastq** raw fastq (optional) to report the fraction of reads mapped; statistics are written to `<name>_mapping_stats.txt`
+
+Coverage is computed per contig, so multi-contig genomes are supported.
 
 ![example_map_dist](/images/example_map_dist.png)
 **Figure 7:** Read distributions on plasmid and genome. For the plasmid; around 3000 there is a certain peak which is actually caused by restriction enzyme, and also peaks around 4000 which is caused by transpositions. For the genome; around ~2.4 Mbp and ~6.8 Mbp, sections are very mobile. This output can not be used for exact locations, but can give an idea about general trend and can be helpful for the undesired conditions.
