@@ -204,3 +204,76 @@ def test_end_to_end_recall_on_simulated_data(sim_dir, tmp_path, capsys):
     assert recall >= 0.85
     assert false_calls == 0
     assert leftover_temp_files(data) == []
+
+
+# ------------------------------------------------- circular plasmid (B09)
+
+COMP = str.maketrans("ACGT", "TGCA")
+
+
+def first_fasta_seq(path):
+    with open(path) as fh:
+        lines = fh.read().split(">")[1].splitlines()
+    return "".join(lines[1:]).upper()
+
+
+def near_origin_sites(plasmid, element):
+    """Insertion sites 0-800 bp from the origin on both sides. Each site is
+    nudged so that the element's end bases differ from the plasmid bases they
+    replace, so an error-free alignment cannot run a base into the element and
+    ref_pos is exactly defined."""
+    n = len(plasmid)
+    sites = []
+    for want in (15, 60, 150, 300, 500, 800, n - 15, n - 60, n - 150, n - 300, n - 500, n - 800):
+        pos = want
+        while plasmid[pos] == element[0] or plasmid[pos - 1] == element[-1] \
+                or plasmid[pos + 1] == element[1] or plasmid[pos - 2] == element[-2]:
+            pos += 1
+        sites.append(pos)
+    return sites
+
+
+@requires_tools
+def test_insertions_next_to_origin_exclude_plasmid(tmp_path):
+    """B09: inserts within 0-800 bp of the plasmid origin (both sides), on reads
+    linearised far from the origin (so every read crosses it), on both strands.
+    The reported insert must be the element only (<= 10 bp overhang) and
+    ref_pos must be the true site. (With the plain linear mapping,
+    main_mapping(..., circular=False), about half of these reads fail.)"""
+    plasmid = first_fasta_seq(PLASMID)
+    element = first_fasta_seq(os.path.join(TEST_DATA, "IS_curated.fasta"))
+    n, e = len(plasmid), len(element)
+    cut = 3000                                    # restriction site, far from the origin
+    truth = {}
+    data = tmp_path / "data dir"
+    (data / "s1").mkdir(parents=True)
+    with open(data / "s1" / "s1.fastq", "w") as fh:
+        for pos in near_origin_sites(plasmid, element):
+            construct = plasmid[:pos] + element + plasmid[pos:]
+            c = cut if cut <= pos else cut + e    # the cut site moves when the element precedes it
+            read = construct[c:] + construct[:c]
+            start = (pos - c) % len(construct)    # element interval on the forward read
+            for strand in "+-":
+                rid = f"site{pos}{'f' if strand == '+' else 'r'}"
+                seq = read if strand == "+" else read.translate(COMP)[::-1]
+                lo, hi = (start, start + e) if strand == "+" else (len(read) - start - e, len(read) - start)
+                truth[rid] = (pos, lo, hi)
+                fh.write(f"@{rid}\n{seq}\n+\n{'5' * len(seq)}\n")
+
+    main_mapping(str(data), PLASMID, GENOME)
+    main_insert_finder_from_bam_batch(str(data), 500)
+    calls = {}
+    with open(data / "s1" / OUTPUT_NAME) as fh:
+        for row in csv.reader(fh, delimiter="\t"):
+            calls.setdefault(row[0], []).append((int(row[1]), int(row[2]), int(row[4])))
+
+    problems = []
+    for rid, (pos, lo, hi) in sorted(truth.items()):
+        got = calls.get(rid, [])
+        if len(got) != 1:
+            problems.append(f"{rid}: {len(got)} calls {got}")
+            continue
+        qs, qe, ref_pos = got[0]
+        if abs(qs - lo) > 10 or abs(qe - hi) > 10 or ref_pos != pos:
+            problems.append(f"{rid}: insert {qs}-{qe} (true {lo}-{hi}), ref_pos {ref_pos} (true {pos})")
+    assert problems == []

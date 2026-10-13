@@ -3,7 +3,7 @@
 # reads to the genome, and write mapping statistics.
 #
 # Usage (run from the data directory that holds one folder per sample):
-#   01_data_prep_from_py.sh PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N]
+#   01_data_prep_from_py.sh PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N] [--linear]
 #
 # Each folder <name>/ must contain <name><SUFFIX> (default SUFFIX: ".fastq").
 # Outputs written into each folder:
@@ -12,6 +12,19 @@
 #   08_mapping_stats.txt, <name>.fasta
 # minimap2 output is streamed straight into samtools, so no SAM files
 # (formerly 01_*.sam, 05_*.sam, 06_*.bam) are written.
+#
+# Circular plasmid (AUDIT B09): the reads are mapped to the plasmid as given
+# (minimap2 defaults, as before) and to the plasmid rotated by half its length
+# (with --no-long-join, so a short plasmid stretch between an insert and a read
+# end is aligned as its own record instead of being lost in a long-joined
+# chain). Per read, src/circular_mapping.py keeps the linear alignments unless
+# the rotated ones align clearly more of the read, and converts rotated
+# alignments back to the ORIGINAL plasmid coordinates (an alignment crossing
+# the origin is split there into two records). So 02_/03_*.bam are ordinary
+# BAMs against the plasmid as given, but plasmid sequence next to the origin
+# is aligned instead of being left in a soft clip.
+# --linear restores the plain linear mapping. The Python interpreter used for
+# the merge is $TRAPOSEQ_PYTHON (default: python3); it needs pysam.
 #
 # Every output is written to a temporary file and renamed only when the step
 # succeeded, so a failed run never leaves a partial file that a later run
@@ -34,6 +47,7 @@ abspath() {
 FORCE=false
 FASTQ_SUFFIX=".fastq"
 THREADS=4
+CIRCULAR=true
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -42,10 +56,11 @@ while [[ $# -gt 0 ]]; do
                         FASTQ_SUFFIX="$2"; shift 2 ;;
         --threads) [[ $# -ge 2 && "$2" =~ ^[1-9][0-9]*$ ]] || die "--threads needs a positive integer"
                    THREADS="$2"; shift 2 ;;
+        --linear) CIRCULAR=false; shift ;;
         *) POSITIONAL+=("$1"); shift ;;
     esac
 done
-[[ ${#POSITIONAL[@]} -eq 2 ]] || die "usage: $0 PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N]"
+[[ ${#POSITIONAL[@]} -eq 2 ]] || die "usage: $0 PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N] [--linear]"
 [[ -f "${POSITIONAL[0]}" ]] || die "plasmid FASTA not found: ${POSITIONAL[0]}"
 [[ -f "${POSITIONAL[1]}" ]] || die "genome FASTA not found: ${POSITIONAL[1]}"
 QUERY_FASTA=$(abspath "${POSITIONAL[0]}")
@@ -54,10 +69,21 @@ GENOME=$(abspath "${POSITIONAL[1]}")
 for tool in minimap2 samtools; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool not found in PATH"
 done
+SCRIPT_DIR=$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+CIRCULAR_PY="$SCRIPT_DIR/../src/circular_mapping.py"
+PYTHON=${TRAPOSEQ_PYTHON:-python3}
+if [[ "$CIRCULAR" == true ]]; then
+    [[ -f "$CIRCULAR_PY" ]] || die "helper not found: $CIRCULAR_PY"
+    command -v "$PYTHON" >/dev/null 2>&1 || die "$PYTHON not found (set TRAPOSEQ_PYTHON or use --linear)"
+fi
 
 # ---------------------------------------------------------- temp-file helpers
 CURRENT_TMP=""
-cleanup() { if [[ -n "$CURRENT_TMP" ]]; then rm -f -- "$CURRENT_TMP"; fi; }
+WORK_TMPDIR=""
+cleanup() {
+    if [[ -n "$CURRENT_TMP" ]]; then rm -f -- "$CURRENT_TMP"; fi
+    if [[ -n "$WORK_TMPDIR" ]]; then rm -rf -- "$WORK_TMPDIR"; fi
+}
 trap cleanup EXIT
 trap 'echo "ERROR: command failed (line $LINENO) in $PWD" >&2' ERR
 
@@ -153,8 +179,19 @@ process_folder() {
     echo "STEP 1: mapping to the plasmid (minimap2 $(minimap2 --version)), keeping mapped reads"
     if needs_build "$MAPPED_PL"; then
         tmp=$(tmp_for "$MAPPED_PL"); CURRENT_TMP=$tmp
-        minimap2 -t "$THREADS" -ax map-ont "$QUERY_FASTA" "$fastq" \
-            | samtools view -@ "$THREADS" -b -F 4 -o "$tmp" -
+        if [[ "$CIRCULAR" == true ]]; then
+            # Both mappings keep unmapped records so the two streams stay in step.
+            minimap2 -t "$THREADS" -ax map-ont "$QUERY_FASTA" "$fastq" \
+                | samtools view -@ "$THREADS" -u -o "$WORK_TMPDIR/linear.bam" -
+            minimap2 -t "$THREADS" -ax map-ont --no-long-join "$ROTATED_FASTA" "$fastq" \
+                | samtools view -@ "$THREADS" -u -o "$WORK_TMPDIR/rotated.bam" -
+            "$PYTHON" "$CIRCULAR_PY" merge "$QUERY_FASTA" \
+                "$WORK_TMPDIR/linear.bam" "$WORK_TMPDIR/rotated.bam" "$tmp"
+            rm -f -- "$WORK_TMPDIR/linear.bam" "$WORK_TMPDIR/rotated.bam"
+        else
+            minimap2 -t "$THREADS" -ax map-ont "$QUERY_FASTA" "$fastq" \
+                | samtools view -@ "$THREADS" -b -F 4 -o "$tmp" -
+        fi
         commit "$tmp" "$MAPPED_PL"
     fi
 
@@ -202,6 +239,11 @@ process_folder() {
 }
 
 # ------------------------------------------------------------------- main
+if [[ "$CIRCULAR" == true ]]; then
+    WORK_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/trapo-seq-map.XXXXXX")
+    ROTATED_FASTA="$WORK_TMPDIR/plasmid_rotated.fasta"
+    "$PYTHON" "$CIRCULAR_PY" rotate "$QUERY_FASTA" "$ROTATED_FASTA"
+fi
 found=0
 for dir in */; do
     name=${dir%/}

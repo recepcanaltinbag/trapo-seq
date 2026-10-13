@@ -20,7 +20,7 @@ Severity: **S** = scientifically wrong results, **C** = crash / pipeline stops,
 | B06 | C | `a_data_mapping.py`, `01_data_prep_from_py.sh` | No `set -e`; mapping failures exit 0 and leave partial SAM/BAM that later runs silently reuse. |
 | B07 | C | `01_data_prep_from_py.sh:33` | Division by zero when no plasmid reads map. |
 | B08 | S | `e_insert_finder_from_bam.py` | *(found during fixing)* For gaps next to the plasmid origin, the flank ending at the linear reference end was used, giving ref_pos 0 / plasmid length instead of the true site. |
-| B09 | S | mapping (design) | *(found during fixing, open)* The plasmid is mapped as a linear reference: plasmid sequence just past the origin is not aligned, so the extracted insert includes ~hundreds of bp of plasmid. Needs a circular-aware reference (rotated/doubled plasmid). |
+| B09 | S | mapping (design) | *(found during fixing, **fixed**)* The plasmid is mapped as a linear reference: plasmid sequence just past the origin is not aligned, so the extracted insert includes ~hundreds of bp of plasmid. Needs a circular-aware reference (rotated/doubled plasmid). |
 
 ## Annotation (BLAST)
 

@@ -110,6 +110,16 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   100 % (error-free) and 78.8 % (default errors; 98.1 % within ±1 bp).
 - DR logos: columns no longer shifted by modal-length trimming; MAFFT only
   for mixed lengths; robust subprocess and figure handling (B36, B37).
+- **Circular plasmid handled in mapping** (B09): reads are also mapped to the
+  plasmid rotated by half its length (`--no-long-join`), and per read the
+  mapping that aligns clearly more of the read is kept, converted back to
+  original coordinates (split at the origin). Inserts near the origin no
+  longer include hundreds of bp of plasmid. Simulated data (default / error-free
+  / ONT r9.4.1): IS-name accuracy 97.4 → 100 / 100 → 100 / 93.8 → 98.8 %;
+  spurious sites 4 → 0 / 1 → 1 / 21 → 10; TSD exact length 62.5 → 75.6 /
+  87.0 → 96.0 / 42.9 → 52.3 %. `map --linear` restores the old mapping.
+  `03_sorted_mapped_to_plasmid.bam` may contain more supplementary records;
+  `ref_pos` is always in [0, plasmid length).
 - `src/j_dr_finder_multithread.py` (which had no threads) replaced
   `src/j_dr_finder.py` (dead duplicate) (B38).
 

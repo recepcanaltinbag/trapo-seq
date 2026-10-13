@@ -22,7 +22,16 @@ Output (TSV, no header), one row per insertion:
 * ``ref_pos``: 0-based reference position next to the insertion. For ``IN``
   it is the position of the first reference base after the insertion; for
   ``SC`` it is the reference coordinate of the boundary of the alignment that
-  flanks the gap.
+  flanks the gap. The plasmid is circular, so a boundary at the contig end
+  (coordinate == contig length) is reported as 0.
+
+Circular plasmid (AUDIT B09): the BAM is expected to come from the
+circular-aware mapping (src/circular_mapping.py, run by the ``map`` step), in
+which plasmid sequence next to the origin is aligned and an alignment that
+crosses the origin is split there into two adjacent records. The gap logic
+below then sees only the inserted element. With a plain linear mapping the
+contig-edge rule in ``flank_of_gap`` (AUDIT B08) still picks the right flank,
+but the insert may then carry plasmid sequence from next to the origin.
 * ``quality``: integer part of the mean base quality of the primary record.
 * ``is_reverse``: strand of the alignment the insertion was found in / flanked by.
 
@@ -134,11 +143,19 @@ def _at_contig_edge(ref_coord, seg):
     return seg.ref_len is not None and seg.ref_len - ref_coord <= CONTIG_EDGE_TOLERANCE
 
 
+def _wrap(ref, seg):
+    """Circular plasmid: the contig end (coordinate == length) is position 0."""
+    if seg.ref_len and ref >= seg.ref_len:
+        return ref - seg.ref_len
+    return ref
+
+
 def flank_of_gap(segments, gap_start, gap_end):
     """Pick the alignment flanking an uncovered read interval.
 
-    Returns (ref_pos, is_reverse) of the flanking alignment boundary, or
-    (None, None) if no segment exists.
+    Returns (ref_pos, is_reverse) of the flanking alignment boundary (a
+    boundary at the contig end is returned as 0), or (None, None) if no
+    segment exists.
 
     A segment ending at ``gap_start`` flanks the gap on the left, one starting
     at ``gap_end`` on the right. The left flank is preferred (legacy
@@ -170,14 +187,14 @@ def flank_of_gap(segments, gap_start, gap_end):
             return None, None
         seg = min(segments, key=lambda s: min(abs(s.q_end - gap_start), abs(s.q_start - gap_end)))
         if abs(seg.q_end - gap_start) <= abs(seg.q_start - gap_end):
-            return ref_at_read_end(seg), seg.is_reverse
-        return ref_at_read_start(seg), seg.is_reverse
+            return _wrap(ref_at_read_end(seg), seg), seg.is_reverse
+        return _wrap(ref_at_read_start(seg), seg), seg.is_reverse
 
     for ref, seg in candidates:
         if not _at_contig_edge(ref, seg):
-            return ref, seg.is_reverse
+            return _wrap(ref, seg), seg.is_reverse
     ref, seg = candidates[0]
-    return ref, seg.is_reverse
+    return _wrap(ref, seg), seg.is_reverse
 
 
 def _mean_quality(read):

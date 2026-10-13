@@ -166,6 +166,27 @@ def test_flank_at_contig_edge_is_avoided(tmp_path):
     assert rows(bam) == [(3000, 4000, 1000, 490, "SC", False)]
 
 
+def test_insertion_exactly_at_origin_reported_as_zero(tmp_path):
+    # B09: with the circular mapping an alignment crossing the origin is split
+    # there. Both flanks of a gap at the origin sit on a contig edge; the
+    # contig end (7000 == REF_LEN) is reported as position 0.
+    bam = make_bam(tmp_path / "a.bam", [
+        {"name": "r", "cigar": "3000M2000S", "pos": 4000},
+        {"name": "r", "cigar": "4000H1000M", "pos": 0, "flag": FLAG_SUPPLEMENTARY},
+    ])
+    assert rows(bam) == [(3000, 4000, 1000, 0, "SC", False)]
+
+
+def test_adjacent_pieces_split_at_origin_give_no_gap(tmp_path):
+    # A read crossing the origin, split into two records with no read bases
+    # between them, contains no insertion.
+    bam = make_bam(tmp_path / "a.bam", [
+        {"name": "r", "cigar": "3000M1000S", "pos": 4000},
+        {"name": "r", "cigar": "3000H1000M", "pos": 0, "flag": FLAG_SUPPLEMENTARY},
+    ])
+    assert rows(bam) == []
+
+
 # -------------------------------------------------------------- secondary
 
 def test_secondary_insertion_not_duplicated_and_quality_from_primary(tmp_path):
