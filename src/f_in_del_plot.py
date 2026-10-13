@@ -2,90 +2,106 @@
 #This code used for visualization of insertions and deletions based on reference positions
 #Also, This code can deal with fragmented alignments, insertions can be taken from tabular file.
 
-#INPUT: BAM FILE, and  TAB FILE of insertions in the format: "{read_id}\t{query_start}\t{query_end}\t{insertion_length}\t{ref_pos}\t{int(quality[read_id])}\t{insert_type}\n"
-#OUTPUT: Graphical outputs
+#INPUT: BAM FILE, and TAB FILE of insertions (insertion_from_bam.tab):
+#  read_id, query_start, query_end, insertion_length, ref_pos, quality, insert_type, is_reverse
+#  (a header line, if present, is skipped)
+#OUTPUT: <output>_{non-weighted,weighted}.pdf and
+#        <output>_{non-weighted,weighted}_{insertion,deletion}_table.tsv
 
 #Recep Can Altınbağ, 24 10 2024, v0.0
 #-------------------------------------
 
-import matplotlib.pyplot as plt
-from collections import defaultdict
-import pysam
+import logging
 import os
+from collections import Counter
+
+import matplotlib.pyplot as plt
 import pandas as pd
+import pysam
+
+logger = logging.getLogger(__name__)
+
+# CIGAR operations
+CIGAR_M, CIGAR_I, CIGAR_D, CIGAR_N, CIGAR_S, CIGAR_H, CIGAR_P, CIGAR_EQ, CIGAR_X = range(9)
+REF_CONSUMING = {CIGAR_M, CIGAR_D, CIGAR_N, CIGAR_EQ, CIGAR_X}
+
 
 def parse_insertion_tab_file(file_path):
-    idct = defaultdict(list)
-    insertion_counts = defaultdict(int)
-    weighted_insertion_counts = defaultdict(int)
+    """Count soft-clip (non-IN) insertions per reference position from the tab file.
+
+    Returns (insertion_counts, weighted_insertion_counts) as Counters.
+    """
+    insertion_counts = Counter()
+    weighted_insertion_counts = Counter()
 
     with open(file_path, 'r') as file:
         for line in file:
-            parts = line.strip().split('\t')
-            read_id = parts[0]
-            query_start = int(parts[1])
-            query_end = int(parts[2])
-            insertion_length = int(parts[3])
-            ref_pos = int(parts[4])
-            quality = int(parts[5])
+            parts = line.rstrip('\n').split('\t')
+            if len(parts) < 7:
+                continue
+            try:
+                insertion_length = int(parts[3])
+                ref_pos = int(parts[4])
+            except ValueError:  # header line
+                continue
             insert_type = parts[6]
-            if insert_type == "IN":        #Insert type IN already can be taken from bam files, so do not need to
+            if insert_type == "IN":  # IN insertions are taken directly from the BAM file
                 continue
             insertion_counts[ref_pos] += 1
-            weighted_insertion_counts[ref_pos] += 1 * insertion_length
-    
+            weighted_insertion_counts[ref_pos] += insertion_length
+
     return insertion_counts, weighted_insertion_counts
 
 
+def _usable(read):
+    return not (read.is_unmapped or read.is_secondary) and read.cigartuples
 
-# Deletion extraction from bam file
+
 def extract_deletions_from_bam(bam_file_path, deletion_threshold):
-    bamfile = pysam.AlignmentFile(bam_file_path, "rb")
-    
-    deletion_counts = defaultdict(int)
-    weighted_deletion_counts = defaultdict(int)
-    
-    for read in bamfile.fetch():
-        read_id = read.query_name
-        cigar =  read.cigartuples
-        ref_pos = read.reference_start
-        
-        for operation, length in cigar:
-            if operation == 2:  # Deletion (CIGAR 'D')
-                if length >= deletion_threshold:  # Threshold 
+    """Deletions (D) >= threshold: count at the deletion start; weighted count spread over
+    every deleted base (weight = deletion length)."""
+    deletion_counts = Counter()
+    weighted_deletion_counts = Counter()
+
+    with pysam.AlignmentFile(bam_file_path, "rb") as bamfile:
+        for read in bamfile.fetch(until_eof=True):
+            if not _usable(read):
+                continue
+            ref_pos = read.reference_start
+            for operation, length in read.cigartuples:
+                if operation == CIGAR_D and length >= deletion_threshold:
                     deletion_counts[ref_pos] += 1
-                    for leng in range (0,length):
-                        weighted_deletion_counts[ref_pos + leng] += 1 * length  # for weighted
-            ref_pos += length if operation in {0, 2} else 0  # Deletion or match, update reference position
-         
+                    for offset in range(length):
+                        weighted_deletion_counts[ref_pos + offset] += length
+                if operation in REF_CONSUMING:
+                    ref_pos += length
+
     return deletion_counts, weighted_deletion_counts
 
 
-# Insertion extraction from bam file
 def extract_insertions_from_bam(bam_file_path, insertion_threshold):
-    bamfile = pysam.AlignmentFile(bam_file_path, "rb")
-    
-    insertion_counts = defaultdict(int)
-    weighted_insertion_counts = defaultdict(int)
+    """CIGAR insertions (I) >= threshold, counted at their reference position."""
+    insertion_counts = Counter()
+    weighted_insertion_counts = Counter()
 
-    for read in bamfile.fetch():
-        read_id = read.query_name
-        cigar =  read.cigartuples
-        ref_pos = read.reference_start
-        
-        for operation, length in cigar:
-            if operation == 1:  # Insertion (CIGAR 'I')
-                if length >= insertion_threshold:  # Threshold
+    with pysam.AlignmentFile(bam_file_path, "rb") as bamfile:
+        for read in bamfile.fetch(until_eof=True):
+            if not _usable(read):
+                continue
+            ref_pos = read.reference_start
+            for operation, length in read.cigartuples:
+                if operation == CIGAR_I and length >= insertion_threshold:
                     insertion_counts[ref_pos] += 1
-                    weighted_insertion_counts[ref_pos] += 1 * length  # for weighted
-            ref_pos += length if operation in {0, 2} else 0  # Deletion or match, update reference position
-            
+                    weighted_insertion_counts[ref_pos] += length
+                if operation in REF_CONSUMING:
+                    ref_pos += length
+
     return insertion_counts, weighted_insertion_counts
 
 
 #Plotting
 def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, output):
-    print(f"{output}_{name} is processing")
+    logger.info("%s_%s is processing", output, name)
     sorted_insertion_positions = sorted(insertion_counts.keys())
     sorted_insertion_counts = [insertion_counts[pos] for pos in sorted_insertion_positions]
 
@@ -93,72 +109,49 @@ def plot_insertion_deletion_graphs(insertion_counts, deletion_counts, name, outp
     sorted_deletion_counts = [deletion_counts[pos] for pos in sorted_deletion_positions]
 
     fig, ax1 = plt.subplots(figsize=(10, 6))
+    try:
+        ax1.set_xlabel('Reference Position')
+        ax1.set_ylabel(f"Deletions [{name}]")
+        ax1.plot(sorted_deletion_positions, sorted_deletion_counts, label=f"Deletions [{name}]",
+                 color='m', marker='x')
+        ax1.legend(loc='upper left')
+        ax1.grid(True)
+        ax1.minorticks_on()
 
-    ax1.set_xlabel('Reference Position')
-    ax1.set_ylabel(f"Deletions [{name}]")
+        ax2 = ax1.twinx()
+        ax2.set_ylabel(f"Insertions [{name}]")
+        ax2.plot(sorted_insertion_positions, sorted_insertion_counts, label=f"Insertions [{name}]",
+                 color='g', marker='s')
+        ax2.legend(loc='upper right')
+        ax2.minorticks_on()
 
-    ax1.plot(sorted_deletion_positions, sorted_deletion_counts, label=f"Deletions [{name}]", color='m', marker='x')
-    ax1.legend(loc='upper left')
-    ax1.grid(True)
-    ax1.minorticks_on()
-    
-    ax2 = ax1.twinx()
-    ax2.set_ylabel(f"Insertions [{name}]")
-    ax2.plot(sorted_insertion_positions, sorted_insertion_counts, label=f"Insertions [{name}]", color='g', marker='s')
-    ax2.legend(loc='upper right')
-    ax2.minorticks_on()
-    
-    plt.title('Insertions and Deletions')
-    plt.savefig(f"{output}_{name}.pdf")
-    print(f"{output}_{name}.pdf saved")
-    #plt.show()
+        ax1.set_title('Insertions and Deletions')
+        fig.savefig(f"{output}_{name}.pdf")
+    finally:
+        plt.close(fig)
+    logger.info("%s_%s.pdf saved", output, name)
 
-    # Combine insertion and deletion data into a DataFrame
-    data_insertions = {
-        "Insertion Position": sorted_insertion_positions,
-        "Insertion Count": sorted_insertion_counts,
-    }
-    data_deletions = {
-        "Deletion Position": sorted_deletion_positions,
-        "Deletion Count": sorted_deletion_counts
-    }
-    df_ins = pd.DataFrame(data_insertions)
-    df_del = pd.DataFrame(data_deletions)
-
-    # Save to a tab-delimited file
+    df_ins = pd.DataFrame({"Insertion Position": sorted_insertion_positions,
+                           "Insertion Count": sorted_insertion_counts})
+    df_del = pd.DataFrame({"Deletion Position": sorted_deletion_positions,
+                           "Deletion Count": sorted_deletion_counts})
     df_ins.to_csv(f'{output}_{name}_insertion_table.tsv', sep='\t', index=False)
     df_del.to_csv(f'{output}_{name}_deletion_table.tsv', sep='\t', index=False)
-    print(f"{output}_{name}.insertion_table.tsv saved")
-    print(f"{output}_{name}.deletion_table.tsv saved")
-
-#----------------------------------------------------
-# EXAMPLE USAGE -------------------------------------
-# INPUTS
-'''
-tab_file_path = 'data/5bac/insertions_from_bam.tab'
-bam_file_path = 'data/5bac/03_sorted_mapped_to_plasmid.bam'
-output_name = "in_del_plot"
-deletion_threshold = 5
-insertion_threshold = 2
-'''
 
 
 def main_in_del_plot(tab_file_path, bam_file_path, output_name, insertion_threshold=2, deletion_threshold=5):
-
+    """Outputs are written next to the BAM file: <bam dir>/<output_name>_*."""
     dir_path = os.path.dirname(os.path.abspath(bam_file_path))
     output = os.path.join(dir_path, output_name)
 
+    # SC insertions from the tab file + IN insertions from the BAM file (B43: add, not overwrite)
+    insertion_counts, weighted_insertion_counts = parse_insertion_tab_file(tab_file_path)
+    insertion_counts_in, weighted_insertion_counts_in = extract_insertions_from_bam(bam_file_path, insertion_threshold)
+    insertion_counts = insertion_counts + insertion_counts_in
+    weighted_insertion_counts = weighted_insertion_counts + weighted_insertion_counts_in
 
-    # Insertions
-    insertion_counts, weighted_insertion_counts = parse_insertion_tab_file(tab_file_path) #SC types are taken from tabular file
-    insertion_counts_in, weighted_insertion_counts_in = extract_insertions_from_bam(bam_file_path, insertion_threshold) #IN types are taken from bam file
-
-    insertion_counts.update(insertion_counts_in)
-    weighted_insertion_counts.update(weighted_insertion_counts_in) #Combine bam file inputs and tabular file inputs
-
-    # Deletions
     deletion_counts, weighted_deletion_counts = extract_deletions_from_bam(bam_file_path, deletion_threshold)
 
-    # Plotting
     plot_insertion_deletion_graphs(insertion_counts, deletion_counts, 'non-weighted', output)
     plot_insertion_deletion_graphs(weighted_insertion_counts, weighted_deletion_counts, 'weighted', output)
+    print(f"In/del plots and tables written to {output}_*")

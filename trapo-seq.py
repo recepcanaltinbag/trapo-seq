@@ -1,4 +1,5 @@
 import argparse
+import logging
 import subprocess
 import os
 import sys
@@ -134,11 +135,13 @@ def main():
     map_dist_parser = subparsers.add_parser("map_dist", help="Plotting dist, to anaylze jumping DNA coordinates both genome and plasmid")
     map_dist_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
     map_dist_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
+    map_dist_parser.add_argument("-f", "--fastq", type=str, default=None, help="Optional raw fastq, to report the fraction of reads mapped")
 
     test_parser = subparsers.add_parser("test", help="to test the pipeline")
 
     # Arguments
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     #A_READ_HISTOGRAMS
     if args.all_help:
@@ -238,7 +241,7 @@ def main():
         elif args.command == "map_dist":
             from src.c_map_dist import main_map_dist
             print("\nPlotting plasmid and genome read distributions...\n")
-            main_map_dist(args.bam, args.output)
+            main_map_dist(args.bam, args.output, fastq_file=args.fastq)
 
         #TEST
         elif args.command == "test":

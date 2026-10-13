@@ -46,6 +46,19 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
 - `read_histogram -v` did not draw the histogram (B47).
 - The CLI only worked when started from the repository root (B50).
 - `__pycache__` files were committed (B51).
+- `is_stat` crashed on IS names with zero or several underscores and on
+  samples without IS hits (B40); it now counts insertions (unique Query ID),
+  not BLAST rows, and records the IS_DB / Genome / Contamination breakdown
+  and the percentage denominator as `#` lines in the `.rcp` file (B41).
+- `heatmap` crashed when all IS fell on one side of the 15 % split (B42).
+- `in_del_plot` overwrote soft-clip insertion counts with CIGAR insertion
+  counts instead of adding them (B43); `=`, `X`, `N` CIGAR ops handled.
+- `kde_mobile` used hard-clip-blind, strand-blind read coordinates and
+  dropped genome segments of split reads (B44); no longer crashes when no read
+  passes the threshold, and the scatter shows only filtered reads (B46).
+- `map_dist` summed coverage of all contigs into the first contig (B45);
+  mapping statistics are now written (`--fastq` optional).
+- `read_histogram` crashed on uniform/empty input and wrote `x.pdf.pdf` (B48).
 
 ## [0.1.0]
 - Initial release.

@@ -1,94 +1,76 @@
 #-------------------------------------
 #This code used for visualization of read lengths
 
-#INPUT: .fastq file
+#INPUT: .fastq file (optionally gzipped)
 #OUTPUT: Graphical outputs
 
 #Recep Can Altınbağ, 24 10 2024, v0.0
 #-------------------------------------
 
-import matplotlib.pyplot as plt
+import gzip
+import logging
 import math
+import os
+
+import matplotlib.pyplot as plt
+
+logger = logging.getLogger(__name__)
+
+
+def _open_text(path):
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt")
+    return open(path, "r")
+
 
 def calculate_read_lengths(fastq_file):
-    """
-    Reads a FASTQ file and calculates the length of each sequence (read).
-    
-    Parameters:
-    fastq_file (str): Path to the input FASTQ file.
-
-    Returns:
-    list: A list containing the lengths of all reads in the FASTQ file.
-    """
+    """Return a list with the length of every read in a (4-line) FASTQ file."""
     read_lengths = []
-    
-    with open(fastq_file, 'r') as f:
-        # Iterate through the FASTQ file, skipping unnecessary lines
+    with _open_text(fastq_file) as f:
         for i, line in enumerate(f):
-            if i % 4 == 1:  # Sequence line (every 4th line, starting from the second)
-                read_lengths.append(len(line.strip()))  # Calculate length of the sequence
-                
+            if i % 4 == 1:  # sequence line
+                read_lengths.append(len(line.strip()))
     return read_lengths
 
-def determine_bin_size(read_lengths):
-    """
-    Determines the bin size for the histogram based on the number of reads.
-    
-    Parameters:
-    read_lengths (list): A list of read lengths.
 
-    Returns:
-    int: The bin size for the histogram.
-    """
-    # Using the square root rule for bin size
-    num_reads = len(read_lengths)
-    bin_count = math.ceil(math.sqrt(num_reads))
-    
-    # Calculate the range of the data (max - min)
+def determine_bin_size(read_lengths):
+    """Bin width from the square-root rule; always >= 1 (B48)."""
+    if not read_lengths:
+        return 1
+    bin_count = math.ceil(math.sqrt(len(read_lengths)))
     data_range = max(read_lengths) - min(read_lengths)
-    
-    # Determine bin size based on range and number of bins
-    bin_size = math.ceil(data_range / bin_count)
-    
-    return bin_size
+    return max(1, math.ceil(data_range / bin_count))
+
+
+def output_path(output, default_ext=".pdf"):
+    """Append `default_ext` only when `output` has no extension (B48: no x.pdf.pdf)."""
+    return output if os.path.splitext(output)[1] else output + default_ext
+
 
 def plot_histogram(fastq_file, output):
-    """
-    Plots a histogram of the read lengths with a dynamically calculated bin size.
-    
-    Parameters:
-    read_lengths (list): A list of read lengths.
+    """Plot a read-length histogram of `fastq_file` and save it to `output`.
+
+    `output` is used as-is if it has an extension, otherwise `.pdf` is appended.
+    Returns the path of the written figure.
     """
     read_lengths = calculate_read_lengths(fastq_file)
+    out = output_path(output)
 
-    # Determine bin size dynamically
-    bin_size = determine_bin_size(read_lengths)
-    
-    plt.figure(figsize=(10, 6))
-    
-    # Plot the histogram with calculated bin size
-    plt.hist(read_lengths, bins=range(min(read_lengths), max(read_lengths) + bin_size, bin_size), color='skyblue', edgecolor='black')
-    
-    # Add labels and title for clarity
-    plt.title("Read Length Distribution", fontsize=16)
-    plt.xlabel("Read Length", fontsize=14)
-    plt.ylabel("Frequency", fontsize=14)
-    plt.savefig(f"{output}.pdf")
-    print(f'Figure saved as {output}')
-    # Show the plot
-    #plt.show()
-
-#----------------------------------------------------
-# EXAMPLE USAGE -------------------------------------
-# INPUTS
-# Path to the FASTQ file (replace with your file path)
-
-#fastq_file = "5bac_4000filtered.fastq"
-
-# OUTPUTS
-#output = "Read_len_histogram"
-#----------------------------------------------------
-    
-#Plot the histogram
-#plot_histogram(fastq_file, output)
-
+    fig, ax = plt.subplots(figsize=(10, 6))
+    try:
+        if read_lengths:
+            bin_size = determine_bin_size(read_lengths)
+            bins = range(min(read_lengths), max(read_lengths) + bin_size + 1, bin_size)
+            ax.hist(read_lengths, bins=bins, color='skyblue', edgecolor='black')
+            ax.set_title(f"Read Length Distribution (n = {len(read_lengths)})", fontsize=16)
+        else:
+            logger.warning("No reads found in %s; writing an empty histogram.", fastq_file)
+            ax.text(0.5, 0.5, "No reads", ha="center", va="center", transform=ax.transAxes)
+            ax.set_title("Read Length Distribution (n = 0)", fontsize=16)
+        ax.set_xlabel("Read Length", fontsize=14)
+        ax.set_ylabel("Frequency", fontsize=14)
+        fig.savefig(out)
+    finally:
+        plt.close(fig)
+    logger.info("Figure saved as %s", out)
+    return out
