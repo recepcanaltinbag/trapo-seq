@@ -63,6 +63,9 @@ with no errors; each fix has a regression test.
 | ⬜ | Per-sample summary report (HTML/TSV): reads, insertion frequency, IS spectrum, hotspots, TSDs |
 | ⬜ | Condition comparison (e.g. stress vs. control) with statistics |
 | ⬜ | Automatic extraction and clustering of novel (non-database) inserts |
+| ⬜ | **Novel element characterisation**: consensus sequence from all reads of a cluster; exact element boundaries; **TIR detection** (terminal inverted repeats at the element ends); DR check both in the plasmid and at the element's genomic copy; family hints from TIR/DR length and transposase presence |
+| ⬜ | Event types beyond simple insertions: cointegrates (replicative transposition, two element copies), one-ended / IS26-type translocatable units, elements without TSD (IS91, IS110, IS200/605) |
+| ⬜ | Simulator: add TIRs to novel elements and cointegrate events so the new modules can be benchmarked |
 
 ## M5 — Paper
 
