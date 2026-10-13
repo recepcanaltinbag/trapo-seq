@@ -59,6 +59,19 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
 - `map_dist` summed coverage of all contigs into the first contig (B45);
   mapping statistics are now written (`--fastq` optional).
 - `read_histogram` crashed on uniform/empty input and wrote `x.pdf.pdf` (B48).
+- **Mapping on macOS produced an empty read FASTA** (GNU-only `sed`), which
+  later crashed annotation (B01); FASTA now written by `samtools fasta`.
+- Mapping failures exited with status 0 and left partial files that later
+  runs silently reused (B06); steps now write to temp files, fail loudly, and
+  rebuild all downstream outputs when an upstream step is rebuilt.
+- Division by zero in the transposition rate when no reads map (B07).
+- **Insertion finder**: CIGAR insertions from earlier alignment records of a
+  read were overwritten (B02); secondary alignments corrupted quality,
+  coverage and positions (B03); soft-clip insertion strand came from the
+  wrong alignment (B04); `=`/`X` CIGAR ops ignored (B05); insertions near the
+  plasmid origin were placed at position 0 / plasmid end (B08). On simulated
+  data, insertion reads placed within 20 bp rose from 66 % to 92 %, with no
+  calls on empty-plasmid reads.
 
 ## [0.1.0]
 - Initial release.

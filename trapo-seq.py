@@ -168,7 +168,11 @@ def main():
         elif args.command == "map":
             from src.a_data_mapping import main_mapping
             print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
-            main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
+            from src.a_data_mapping import MappingError
+            try:
+                main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
+            except (MappingError, FileNotFoundError) as err:
+                sys.exit(f"Mapping failed: {err}")
             print('Mapping process was ended')
 
         #E_INSERT_FINDER_FROM_BAM
