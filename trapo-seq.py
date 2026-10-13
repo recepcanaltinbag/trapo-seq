@@ -1,6 +1,12 @@
 import argparse
 import subprocess
 import os
+import sys
+
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, REPO_DIR)
+
+from src import __version__
 
 trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
@@ -8,7 +14,7 @@ trapo_seq_logo_v2 = """
 +-+-+-+-+-+-+-+-+-+
 """
 
-trapo_seq_logo = """
+trapo_seq_logo = r"""
  ___________________________________________
 | ___ ____ ____ ___  ____    ____ ____ ____ |
 |  |  |__/ |__| |__] |  | __ [__  |___ |  | |
@@ -28,7 +34,7 @@ def main():
     parser.add_argument(
         '--version',
         action='version',
-        version='trapo-seq 1.0',  # Replace '1.0' with your program's version
+        version=f'trapo-seq {__version__}',
         help="Show program's version number and exit"
     )
 
@@ -67,7 +73,7 @@ def main():
     blast_annot_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="path of genome in fasta format")
     blast_annot_parser.add_argument("--is_fasta", type=str, required=False, help="path of manually curated ISes")
     blast_annot_parser.add_argument("--temp", type=str, default="data/temp", help="temp directory, default :temp")
-    blast_annot_parser.add_argument("-o", "--output", type=str, default="best_alignments.tab", help="Output file")
+    blast_annot_parser.add_argument("-o", "--output", type=str, default="best_alignment.tab", help="Output file")
     blast_annot_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
@@ -141,11 +147,8 @@ def main():
     else:
         if args.command == "read_histogram":
             from src.a_read_histograms import plot_histogram
-            if args.verbose:
-                print('Histograms')
-            else:
-                print("Histograms...")
-                plot_histogram(args.fastq, args.output)
+            print("Histograms...")
+            plot_histogram(args.fastq, args.output)
         
         #B_FILTER
         elif args.command == "filter":
@@ -156,7 +159,6 @@ def main():
         
         #C_ALIGNMENT
         elif args.command == "map":
-            os.chmod("scripts/01_data_prep_from_py.sh", 0o755)
             from src.a_data_mapping import main_mapping
             print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
             main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
@@ -234,8 +236,7 @@ def main():
         #TEST
         elif args.command == "test":
             print('Starting test!\n')
-            os.chmod("test_script.sh", 0o755)
-            subprocess.run(["./test_script.sh"], check=True)
+            subprocess.run(["bash", os.path.join(REPO_DIR, "test_script.sh")], check=True)
 
 
         else:

@@ -1,0 +1,19 @@
+# conda env create -f environment.yml && conda activate trapo-seq-env
+name: trapo-seq-env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.9
+  - minimap2>=2.24
+  - samtools>=1.15
+  - blast>=2.12
+  - mafft>=7.4
+  - pysam>=0.21
+  - biopython>=1.80
+  - pandas>=1.5
+  - numpy>=1.23
+  - matplotlib>=3.6
+  - seaborn>=0.12
+  - logomaker>=0.8
+  - pytest>=7
