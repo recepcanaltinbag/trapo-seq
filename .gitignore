@@ -23,3 +23,6 @@ sim_out/
 # Local publication workspace (results, figures, notes) - not versioned
 publication/
 .DS_Store
+
+# Third-party element databases (ISfinder, TnCentral, INTEGRALL, PICOTA) - licensed, not redistributed
+IS_Db/
