@@ -19,6 +19,9 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
 - Test suite (`pytest`): simulator, CLI smoke tests, annotation unit tests.
 
 ### Changed
+- `map --threads` (default 4) for minimap2 and samtools: on 20 k simulated
+  reads, mapping 138 s → 58 s and the whole pipeline 192 s → 106 s with 8
+  threads, identical results.
 - **Annotation output now has exactly one row per insertion** (B12). Each
   insert is classified once: best curated-IS subject if it covers ≥
   `--threshold` % of the insert (`IS_DB`), otherwise best genome subject

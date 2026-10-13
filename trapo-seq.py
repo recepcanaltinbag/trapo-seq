@@ -58,6 +58,7 @@ def main():
     map_parser.add_argument("-p", "--plasmid", type=str, required=True, help="Path of trap plasmid in fasta format")
     map_parser.add_argument("-g", "--genome", type=str, required=True, help="path of genome in fasta format")
     map_parser.add_argument("-f", "--force", action="store_true", help="Force overwrite if the file exists")
+    map_parser.add_argument("-t", "--threads", type=int, default=4, help="Threads for minimap2 and samtools, default: 4")
 
     insert_finder_parser = subparsers.add_parser("insert_finder", help="finding inserts from .bam file")
     insert_finder_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
@@ -172,7 +173,7 @@ def main():
             print(f"\nMapping process\nInput Directory: {args.input_dir}, \nPlasmid: {args.plasmid}, \nGenome: {args.genome}, \nOverwriting: {args.force}")
             from src.a_data_mapping import MappingError
             try:
-                main_mapping(args.input_dir, args.plasmid, args.genome, args.force)
+                main_mapping(args.input_dir, args.plasmid, args.genome, args.force, threads=args.threads)
             except (MappingError, FileNotFoundError) as err:
                 sys.exit(f"Mapping failed: {err}")
             print('Mapping process was ended')

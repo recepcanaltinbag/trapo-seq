@@ -64,6 +64,7 @@ PROFILES = {
 }
 # The development branch starts from the same CLI; edit here as it diverges.
 PROFILES["dev"] = dict(PROFILES["v0.1.0"])
+PROFILES["dev"]["map"] = "{py} {cli} map -d {data} -p {plasmid} -g {genome} --force --threads {threads}"
 PROFILES["dev"]["dr_finder"] = "{py} {cli} dr_finder -d {data} -p {plasmid} --is_fasta {is_fasta} --threads {threads}"
 SHIM_B52 = """# Written by simulate/run_benchmark.py (AUDIT B52): v0.1.0 imports the unused
 # Bio.Blast.Applications.NcbiblastnCommandline, removed in Biopython >= 1.86.

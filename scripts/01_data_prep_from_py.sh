@@ -3,7 +3,7 @@
 # reads to the genome, and write mapping statistics.
 #
 # Usage (run from the data directory that holds one folder per sample):
-#   01_data_prep_from_py.sh PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX]
+#   01_data_prep_from_py.sh PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N]
 #
 # Each folder <name>/ must contain <name><SUFFIX> (default SUFFIX: ".fastq").
 # Outputs written into each folder:
@@ -33,16 +33,19 @@ abspath() {
 # ---------------------------------------------------------------- arguments
 FORCE=false
 FASTQ_SUFFIX=".fastq"
+THREADS=4
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --force) FORCE=true; shift ;;
         --fastq-suffix) [[ $# -ge 2 ]] || die "--fastq-suffix needs a value"
                         FASTQ_SUFFIX="$2"; shift 2 ;;
+        --threads) [[ $# -ge 2 && "$2" =~ ^[1-9][0-9]*$ ]] || die "--threads needs a positive integer"
+                   THREADS="$2"; shift 2 ;;
         *) POSITIONAL+=("$1"); shift ;;
     esac
 done
-[[ ${#POSITIONAL[@]} -eq 2 ]] || die "usage: $0 PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX]"
+[[ ${#POSITIONAL[@]} -eq 2 ]] || die "usage: $0 PLASMID.fasta GENOME.fasta [--force] [--fastq-suffix SUFFIX] [--threads N]"
 [[ -f "${POSITIONAL[0]}" ]] || die "plasmid FASTA not found: ${POSITIONAL[0]}"
 [[ -f "${POSITIONAL[1]}" ]] || die "genome FASTA not found: ${POSITIONAL[1]}"
 QUERY_FASTA=$(abspath "${POSITIONAL[0]}")
@@ -153,19 +156,19 @@ process_folder() {
     echo "STEP 1: mapping to the plasmid (minimap2 $(minimap2 --version))"
     if needs_build "$ALIGNED_PL"; then
         tmp=$(tmp_for "$ALIGNED_PL"); CURRENT_TMP=$tmp
-        minimap2 -ax map-ont "$QUERY_FASTA" "$fastq" > "$tmp"
+        minimap2 -t "$THREADS" -ax map-ont "$QUERY_FASTA" "$fastq" > "$tmp"
         commit "$tmp" "$ALIGNED_PL"
     fi
 
     echo "STEP 2: keeping mapped reads, sorting, indexing"
     if needs_build "$MAPPED_PL"; then
         tmp=$(tmp_for "$MAPPED_PL"); CURRENT_TMP=$tmp
-        samtools view -b -F 4 -o "$tmp" "$ALIGNED_PL"
+        samtools view -@ "$THREADS" -b -F 4 -o "$tmp" "$ALIGNED_PL"
         commit "$tmp" "$MAPPED_PL"
     fi
     if needs_build "$SORTED_MAPPED_PL"; then
         tmp=$(tmp_for "$SORTED_MAPPED_PL"); CURRENT_TMP=$tmp
-        samtools sort -o "$tmp" "$MAPPED_PL"
+        samtools sort -@ "$THREADS" -o "$tmp" "$MAPPED_PL"
         commit "$tmp" "$SORTED_MAPPED_PL"
     fi
     if [[ "$REBUILT" == true || ! -f "$SORTED_MAPPED_PL.bai" ]]; then
@@ -183,17 +186,17 @@ process_folder() {
     echo "STEP 3: mapping plasmid reads to the genome"
     if needs_build "$ALIGNED_GN"; then
         tmp=$(tmp_for "$ALIGNED_GN"); CURRENT_TMP=$tmp
-        minimap2 -ax map-ont "$GENOME" "$MAPPED_PL_FQ" > "$tmp"
+        minimap2 -t "$THREADS" -ax map-ont "$GENOME" "$MAPPED_PL_FQ" > "$tmp"
         commit "$tmp" "$ALIGNED_GN"
     fi
     if needs_build "$ALIGNED_GN_BM"; then
         tmp=$(tmp_for "$ALIGNED_GN_BM"); CURRENT_TMP=$tmp
-        samtools view -b -o "$tmp" "$ALIGNED_GN"
+        samtools view -@ "$THREADS" -b -o "$tmp" "$ALIGNED_GN"
         commit "$tmp" "$ALIGNED_GN_BM"
     fi
     if needs_build "$ALIGNED_GN_ST"; then
         tmp=$(tmp_for "$ALIGNED_GN_ST"); CURRENT_TMP=$tmp
-        samtools sort -o "$tmp" "$ALIGNED_GN_BM"
+        samtools sort -@ "$THREADS" -o "$tmp" "$ALIGNED_GN_BM"
         commit "$tmp" "$ALIGNED_GN_ST"
     fi
     if [[ "$REBUILT" == true || ! -f "$ALIGNED_GN_ST.bai" ]]; then

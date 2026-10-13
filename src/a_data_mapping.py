@@ -40,7 +40,7 @@ class MappingError(subprocess.CalledProcessError):
         return msg
 
 
-def main_mapping(data_dir, query_fasta, genome_fasta, force=False):
+def main_mapping(data_dir, query_fasta, genome_fasta, force=False, threads=4):
     """Run the mapping script on every sample folder in ``data_dir``.
 
     Raises FileNotFoundError for missing inputs and MappingError if any
@@ -56,6 +56,7 @@ def main_mapping(data_dir, query_fasta, genome_fasta, force=False):
     args = ["bash", script, os.path.abspath(query_fasta), os.path.abspath(genome_fasta)]
     if force:
         args.append("--force")
+    args += ["--threads", str(max(1, int(threads)))]
     logger.info("Running %s in %s", script, data_dir)
 
     tail = collections.deque(maxlen=30)
