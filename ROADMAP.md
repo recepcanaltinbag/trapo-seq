@@ -6,6 +6,12 @@ milestone is merged. Finding IDs (B01…) refer to [`docs/AUDIT.md`](docs/AUDIT.
 
 Status legend: ✅ done · 🔄 in progress · ⬜ planned
 
+GitHub issues: #9 (macOS FASTA) → B01 ✅ · #8 (temp dir) → B17/batch temp ✅ ·
+#7 (multi-contig map_dist) → B45 ✅ · #3 (better DR finder) → B30–B38 ✅ ·
+#4 (TIR logo) → M4 · #6 (cluster insertions) → M3/M4 · #5 (plasmid–genome
+homology) → M1 · #1 (insertion-level quality) → M4. Fixed issues are closed by
+the `dev` → `main` pull request.
+
 ---
 
 ## M0 — Foundations
@@ -14,9 +20,9 @@ Status legend: ✅ done · 🔄 in progress · ⬜ planned
 |---|------|----------------------|
 | ✅ | Code audit of all modules | `docs/AUDIT.md`, 40+ findings with IDs |
 | ✅ | Ground-truth read simulator (`simulate/`) | Error-free simulation reproduces IS + TSD exactly for 100 % of reads |
-| ⬜ | `environment.yml` (conda) with all external tools | `conda env create -f environment.yml` then `trapo-seq test` passes |
-| ⬜ | Remove committed `__pycache__`, update `.gitignore` (B51) | clean `git status` after a run |
-| ⬜ | Paths independent of the working directory (B50) | pipeline runs from any directory and on paths with spaces |
+| ✅ | `environment.yml` (conda) with all external tools | `conda env create -f environment.yml` then `trapo-seq test` passes |
+| ✅ | Remove committed `__pycache__`, update `.gitignore` (B51) | clean `git status` after a run |
+| ✅ | Paths independent of the working directory (B50) | pipeline runs from any directory and on paths with spaces |
 
 ## M1 — Correctness (blocks everything below)
 
@@ -24,12 +30,14 @@ Priority order: results that are scientifically wrong first, then crashes.
 
 | | Group | IDs |
 |---|-------|-----|
-| ⬜ | Annotation: real E-value cutoff, best hit, one row per insertion, header IDs, off-by-one | B10–B14, B17, B18 |
-| ⬜ | Insertion finder: secondary alignments, multi-record reads, strand, `=`/`X` | B02–B05 |
-| ⬜ | Mapping: portable FASTA conversion, fail loudly, no stale outputs | B01, B06, B07 |
-| ⬜ | DR finder: flank logic, circular origin, read-ID parsing, thresholds | B30–B35 |
-| ⬜ | Stats/plots: counting per insertion, crashes, multi-contig | B36–B48 |
-| ⬜ | CLI: `--is_fasta` fallback, `--keep_temp`, `--gap`, output names | B15, B16, B20, B33, B47 |
+| ✅ | Annotation: real E-value cutoff, best hit, one row per insertion, header IDs, off-by-one | B10–B14, B17, B18 |
+| ✅ | Insertion finder: secondary alignments, multi-record reads, strand, `=`/`X` | B02–B05 |
+| ✅ | Mapping: portable FASTA conversion, fail loudly, no stale outputs | B01, B06, B07 |
+| ✅ | DR finder: flank logic, circular origin, read-ID parsing, thresholds | B30–B35 |
+| ✅ | Stats/plots: counting per insertion, crashes, multi-contig | B36–B48 |
+| ✅ | CLI: `--is_fasta` fallback, `--keep_temp`, `--gap`, output names | B15, B16, B20, B33, B47 |
+| ⬜ | Circular plasmid in mapping (inserts near the origin carry plasmid sequence) | B09 |
+| ⬜ | Plasmid–genome homologous regions cause false insertions: detect shared segments (plasmid vs genome BLAST), mask or flag them; add homologous segments to the simulator to test | #5 |
 
 Acceptance: the original `test-data` and a simulated dataset run end to end
 with no errors; each fix has a regression test.
@@ -38,7 +46,7 @@ with no errors; each fix has a regression test.
 
 | | Task | Acceptance criterion |
 |---|------|----------------------|
-| ⬜ | `simulate/evaluate.py`: score pipeline output against `truth.tsv` | per-read and per-site precision, recall, F1; position error (bp); IS-name accuracy; TSD-length accuracy; contamination classification |
+| ✅ | `simulate/evaluate.py`: score pipeline output against `truth.tsv` | per-read and per-site precision, recall, F1; position error (bp); IS-name accuracy; TSD-length accuracy; contamination classification |
 | ⬜ | Benchmark grid | read error 1–10 %; insertion rate 1–50 %; depth 100–10 000 reads; novel-insert fraction; fragmentation |
 | ⬜ | E-value / identity threshold sweep | justified defaults (replaces E = 0, B10) |
 | ⬜ | Comparison with a general long-read SV caller (e.g. Sniffles2) on the same simulated data | table + figure |
@@ -51,7 +59,8 @@ with no errors; each fix has a regression test.
 | ⬜ | `pyproject.toml`, `trapo-seq` console entry point, version from one place |
 | ⬜ | `pytest` suite (unit tests + small end-to-end test on simulated data) |
 | ⬜ | GitHub Actions CI (Linux + macOS) |
-| ⬜ | Merge single/batch duplicates; one BLAST call per sample instead of per insertion (B19, B38) |
+| ✅ | Merge single/batch duplicates; one BLAST call per sample instead of per insertion (B19, B38) |
+| ⬜ | Speed at real-data scale (50–100k reads/barcode): profile every step; cluster identical inserts before BLAST (#6) |
 | ⬜ | `logging` instead of prints and stdout redirection |
 | ⬜ | Bioconda recipe; Zenodo DOI for releases |
 
@@ -66,6 +75,9 @@ with no errors; each fix has a regression test.
 | ⬜ | **Novel element characterisation**: consensus sequence from all reads of a cluster; exact element boundaries; **TIR detection** (terminal inverted repeats at the element ends); DR check both in the plasmid and at the element's genomic copy; family hints from TIR/DR length and transposase presence |
 | ⬜ | Event types beyond simple insertions: cointegrates (replicative transposition, two element copies), one-ended / IS26-type translocatable units, elements without TSD (IS91, IS110, IS200/605) |
 | ⬜ | Simulator: add TIRs to novel elements and cointegrate events so the new modules can be benchmarked |
+| ⬜ | TIR sequence logos, like DR logos (#4) |
+| ⬜ | Insertion-level base quality instead of whole-read average, to flag sequencing artefacts (#1) |
+| ⬜ | Realistic ONT error model in the simulator (indel-dominant, homopolymer-aware, per-read accuracy; R9.4.1 / R10.4.1 profiles) |
 
 ## M5 — Paper
 
