@@ -27,6 +27,12 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   cluster each, boundaries exact for 53/59 and within 2 bp for all, TIR found
   for 58/59, genomic DR exact for 53/59; random genome intervals give 1.1 %
   `mobile_element_candidate`.
+- Simulator `--error_model ont` with `--ont_profile r9.4.1|r10.4.1`:
+  per-read accuracy from a Beta distribution, indel-dominant composition,
+  homopolymer length errors, error-correlated qualities; all parameters
+  overridable (presets are approximations). Runs in time proportional to the
+  number of errors: 20 k reads in 21.5 s (r9.4.1) / 9.1 s (r10.4.1) vs ~180 s
+  for the default uniform model, whose output is unchanged.
 - Simulator `--novel_mode element`: synthetic mobile elements with TIRs, an
   ORF and a genomic DR, inserted into a copy of the genome and then into the
   plasmid; truth in `elements.tsv`. Default output is unchanged (byte-identical).

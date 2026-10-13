@@ -78,7 +78,7 @@ with no errors; each fix has a regression test.
 | 🔄 | Simulator: add TIRs to novel elements (done; cointegrates pending) and cointegrate events so the new modules can be benchmarked |
 | ⬜ | TIR sequence logos, like DR logos (#4) |
 | ⬜ | Insertion-level base quality instead of whole-read average, to flag sequencing artefacts (#1) |
-| ⬜ | Realistic ONT error model in the simulator (indel-dominant, homopolymer-aware, per-read accuracy; R9.4.1 / R10.4.1 profiles) |
+| ✅ | Realistic ONT error model in the simulator (indel-dominant, homopolymer-aware, per-read accuracy; R9.4.1 / R10.4.1 profiles) |
 
 ## M5 — Paper
 
