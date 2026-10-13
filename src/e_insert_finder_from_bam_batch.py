@@ -24,8 +24,12 @@ def find_file_with_prefix(directory, prefix, enfix):
     return None
 
 
-def main_insert_finder_from_bam_batch(data_dir, insertion_threshold=500):
-    """Returns {folder: list of Insertion records} for the processed folders."""
+def main_insert_finder_from_bam_batch(data_dir, insertion_threshold=500, plasmid_fasta=None,
+                                      enzyme=None, cut_site=None, overhang=None, adapter_fasta=None):
+    """Returns {folder: list of Insertion records} for the processed folders.
+
+    plasmid_fasta / enzyme / cut_site / overhang / adapter_fasta: artefact
+    checks (see e_insert_finder_from_bam.main_insert_finder_from_bam)."""
     folders = sorted(f for f in os.listdir(data_dir)
                      if os.path.isdir(os.path.join(data_dir, f)))
     results = {}
@@ -37,5 +41,7 @@ def main_insert_finder_from_bam_batch(data_dir, insertion_threshold=500):
             continue
         logger.info("Processing %s (%s)", folder, bamfile)
         output_file = os.path.join(folder_path, OUTPUT_NAME)
-        results[folder] = main_insert_finder_from_bam(bamfile, output_file, insertion_threshold)
+        results[folder] = main_insert_finder_from_bam(
+            bamfile, output_file, insertion_threshold, plasmid_fasta=plasmid_fasta, enzyme=enzyme,
+            cut_site=cut_site, overhang=overhang, adapter_fasta=adapter_fasta)
     return results

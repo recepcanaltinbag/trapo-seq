@@ -24,11 +24,23 @@
 #"shared_segment:<Note>". By default they are already labelled Contamination, so they
 #are not in the IS percentages; #Homology_flagged reports how many insertions carry the
 #flag (with blast_annot's "keep" mode their Note, and hence the counts, are unchanged).
+#
+#Artefact flags (docs/ARTEFACTS.md): the Artefact column of best_alignment.tab lists the
+#flags of each call. Written only when n > 0:
+#   #Artefact_flagged=<n>            insertions with at least one ARTEFACT flag (chimera,
+#                                    ligation at the cut site, fold-back, adapter, plasmid self)
+#   #Artefact_excluded=<n>           of these, relabelled Contamination by --artefact_action exclude
+#                                    (calls that were Contamination already are not counted)
+#   #Artefact_<flag>=<n>             insertions carrying <flag> (artefact and caution flags)
+#With the default --artefact_action flag the Notes, and so the IS percentages, include flagged
+#calls; the counts show how many of them are suspicious.
 #-------------------------------------
 import logging
 import os
 
 import pandas as pd
+
+from .artefacts import ARTEFACT_FLAGS, split_flags
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +93,20 @@ def summarize_condition(tab_file):
     if "Homology" in df.columns and total:
         homology_flagged = int(df["Homology"].astype(str).str.startswith("shared_segment").sum())
 
+    flag_counts, artefact_flagged, excluded = {}, 0, 0
+    if "Artefact" in df.columns and total:
+        for v in df["Artefact"].fillna("-").astype(str):
+            if v.startswith("excluded:"):
+                parts = v.split(":", 2)
+                if len(parts) > 1 and parts[1] != "Contamination":
+                    excluded += 1           # the Note was changed by the exclusion
+                v = parts[2] if len(parts) > 2 else ""
+            hard, caution = split_flags(v)
+            if hard or any(f == "one_sided_unsupported" for f in caution):
+                artefact_flagged += 1
+            for f in hard + caution:
+                flag_counts[f] = flag_counts.get(f, 0) + 1
+
     is_df = df[df["Note"] == "IS_DB"]
     is_count = int(is_df.shape[0])
     rows = []
@@ -91,7 +117,8 @@ def summarize_condition(tab_file):
             rows.append((family, name, 100.0 * count / is_count, int(count)))
         rows.sort(key=lambda r: (-r[3], r[0], r[1]))
     return {"total": total, "note_counts": note_counts, "is_count": is_count, "rows": rows,
-            "homology_flagged": homology_flagged}
+            "homology_flagged": homology_flagged, "artefact_flagged": artefact_flagged,
+            "artefact_excluded": excluded, "artefact_flags": flag_counts}
 
 
 def format_condition(condition, summary):
@@ -102,6 +129,15 @@ def format_condition(condition, summary):
         lines.append(f"#{note}={notes.get(note, 0)}")
     if summary.get("homology_flagged"):
         lines.append(f"#Homology_flagged={summary['homology_flagged']}")
+    if summary.get("artefact_flagged"):
+        lines.append(f"#Artefact_flagged={summary['artefact_flagged']}")
+    if summary.get("artefact_excluded"):
+        lines.append(f"#Artefact_excluded={summary['artefact_excluded']}")
+    flags = summary.get("artefact_flags") or {}
+    order = list(ARTEFACT_FLAGS) + sorted(set(flags) - set(ARTEFACT_FLAGS))
+    for f in order:
+        if flags.get(f):
+            lines.append(f"#Artefact_{f}={flags[f]}")
     lines.append("#percentage_denominator=IS_DB")
     for family, name, pct, count in summary["rows"]:
         lines.append(f"{family}, {name}, {pct:.2f}, {count}")
@@ -124,7 +160,10 @@ def main_is_stat(data_dir, out_file):
         print(f"{folder}: {summary['total']} insertions ({breakdown}); "
               f"IS percentages are relative to the {summary['is_count']} IS_DB insertions" +
               (f"; {summary['homology_flagged']} flagged as plasmid-genome homology artefacts"
-               if summary.get("homology_flagged") else ""))
+               if summary.get("homology_flagged") else "") +
+              (f"; {summary['artefact_flagged']} carry artefact flags"
+               + (f" ({summary['artefact_excluded']} excluded)" if summary.get("artefact_excluded") else "")
+               if summary.get("artefact_flagged") else ""))
         for family, name, pct, count in summary["rows"]:
             logger.info("  %s %s: %.2f%% (%d)", family, name, pct, count)
         if summary["is_count"] == 0:

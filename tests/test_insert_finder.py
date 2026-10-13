@@ -234,7 +234,8 @@ def test_output_file_format(tmp_path):
         "r1\t500\t1200\t700\t600\t30\tIN\tFalse",
         "r2\t0\t800\t800\t3000\t12\tSC\tTrue",
     ]
-    assert os.listdir(out.parent) == ["out.tab"]       # no temp files left
+    # no temp files left; the artefact evidence and cut site are written next to it
+    assert sorted(os.listdir(out.parent)) == ["out.tab", "out_artefacts.tsv", "out_cut_site.tsv"]
 
 
 def test_batch_matches_single(tmp_path):

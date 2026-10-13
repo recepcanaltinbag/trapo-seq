@@ -68,10 +68,20 @@ def main():
     insert_finder_parser.add_argument("-b", "--bam", type=str, required=True, help="Path of bam file")
     insert_finder_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     insert_finder_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
+    insert_finder_parser.add_argument("--plasmid", type=str, default=None, help="Plasmid FASTA for artefact checks (found automatically next to the BAM or in the data folder)")
+    insert_finder_parser.add_argument("--enzyme", type=str, default=None, help="Restriction enzyme used to linearise the plasmid (e.g. XbaI); inferred from read ends if omitted")
+    insert_finder_parser.add_argument("--cut_site", type=int, default=None, help="Cut site on the plasmid (0-based), overrides inference")
+    insert_finder_parser.add_argument("--overhang", type=str, default=None, help="Overhang sequence at the cut site, used with --cut_site")
+    insert_finder_parser.add_argument("--adapter_fasta", type=str, default=None, help="FASTA of adapter/barcode motifs to scan for (default: ONT ligation adapter)")
 
     insert_finder_batch_parser = subparsers.add_parser("insert_finder_batch", help="finding inserts from .bam file in Batch mode")
     insert_finder_batch_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Folder of folders including bam files")
     insert_finder_batch_parser.add_argument("-t", "--threshold", type=int, default=500, help="Insertion Threshold, insertions lower than this will be disregarded!")
+    insert_finder_batch_parser.add_argument("--plasmid", type=str, default=None, help="Plasmid FASTA for artefact checks (found automatically next to the BAM or in the data folder)")
+    insert_finder_batch_parser.add_argument("--enzyme", type=str, default=None, help="Restriction enzyme used to linearise the plasmid (e.g. XbaI); inferred from read ends if omitted")
+    insert_finder_batch_parser.add_argument("--cut_site", type=int, default=None, help="Cut site on the plasmid (0-based), overrides inference")
+    insert_finder_batch_parser.add_argument("--overhang", type=str, default=None, help="Overhang sequence at the cut site, used with --cut_site")
+    insert_finder_batch_parser.add_argument("--adapter_fasta", type=str, default=None, help="FASTA of adapter/barcode motifs to scan for (default: ONT ligation adapter)")
 
     blast_annot_parser = subparsers.add_parser("blast_annot", help="Annotation with Blast")
     blast_annot_parser.add_argument("-i", "--ins_bam", type=str, required=True, help="Path of insertions from bam tabular file")
@@ -83,6 +93,7 @@ def main():
     blast_annot_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
+    blast_annot_parser.add_argument("--artefact_action", choices=["flag", "exclude"], default="flag", help="Calls with artefact flags (chimeras, ligation at the cut site, fold-backs...): flag only (default) or relabel as Contamination")
     blast_annot_parser.add_argument("--homology_action", choices=["relabel", "keep"], default="relabel", help="Calls explained by plasmid-genome shared segments: relabel as Contamination (default) or keep the label and only flag them")
     blast_annot_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary BLAST files and databases (for debugging)")
     blast_annot_parser.add_argument("--evalue", type=float, default=1e-10, help="BLAST E-value cutoff for insert annotation, default: 1e-10")
@@ -98,6 +109,8 @@ def main():
     blast_annot_batch_parser.add_argument("-t", "--threshold", type=int, default=70, help="Threshold for elimination of Tns, If lower than this, disregard. Value: 0-100, default:70")
     blast_annot_batch_parser.add_argument("--threads", type=int, default=2, help="How many threads it is wanted for blast searches, default 2")
     blast_annot_batch_parser.add_argument("--debug", action="store_true", help="For debugging, it can be given. Prints everything")
+    blast_annot_batch_parser.add_argument("--artefact_action", choices=["flag", "exclude"], default="flag", help="Calls with artefact flags (chimeras, ligation at the cut site, fold-backs...): flag only (default) or relabel as Contamination")
+    blast_annot_batch_parser.add_argument("--bleed_pct", type=float, default=5, help="Flag a site as possible barcode bleed-through if it has fewer than this %% of the reads it has in another barcode, default: 5")
     blast_annot_batch_parser.add_argument("--homology_action", choices=["relabel", "keep"], default="relabel", help="Calls explained by plasmid-genome shared segments: relabel as Contamination (default) or keep the label and only flag them")
     blast_annot_batch_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary BLAST files and databases (for debugging)")
     blast_annot_batch_parser.add_argument("--evalue", type=float, default=1e-10, help="BLAST E-value cutoff for insert annotation, default: 1e-10")
@@ -212,13 +225,17 @@ def main():
         elif args.command == "insert_finder":
             from src.e_insert_finder_from_bam import main_insert_finder_from_bam
             print(f"\nMapping process\nInput BAM: {args.bam}, \nOutput: {args.output}, \nThreshold: {args.threshold}")
-            main_insert_finder_from_bam(args.bam, args.output, args.threshold)
+            main_insert_finder_from_bam(args.bam, args.output, args.threshold, plasmid_fasta=args.plasmid,
+                                        enzyme=args.enzyme, cut_site=args.cut_site, overhang=args.overhang,
+                                        adapter_fasta=args.adapter_fasta)
 
         #BATCH VERSION
         elif args.command == "insert_finder_batch":
             from src.e_insert_finder_from_bam_batch import main_insert_finder_from_bam_batch
             print(f"\n[BATCH] Mapping process\nInput BAM: {args.input_dir}, \nThreshold: {args.threshold}")
-            main_insert_finder_from_bam_batch(args.input_dir, args.threshold)
+            main_insert_finder_from_bam_batch(args.input_dir, args.threshold, plasmid_fasta=args.plasmid,
+                                              enzyme=args.enzyme, cut_site=args.cut_site, overhang=args.overhang,
+                                              adapter_fasta=args.adapter_fasta)
 
         #G_BLAST_THE_INSERTS_
         elif args.command == "blast_annot":
@@ -227,7 +244,8 @@ def main():
             main_annot(args.ins_bam, args.mapped_fasta, args.genome_fasta, is_fasta=args.is_fasta, temp_dir=args.temp,
                        output_csv=args.output, threshold=args.threshold, threads=args.threads, debug=args.debug,
                        keep_temp=args.keep_temp, partial_threshold=args.partial_threshold, partial_len=args.partial_len,
-                       evalue=args.evalue, task=args.blast_task, homology_action=args.homology_action)
+                       evalue=args.evalue, task=args.blast_task, homology_action=args.homology_action,
+                       artefact_action=args.artefact_action)
         
         #G_BLAST_ANNOT_BATCH
         elif args.command == "blast_annot_batch":
@@ -237,7 +255,8 @@ def main():
                              threshold=args.threshold, threads=args.threads, debug=args.debug,
                              keep_temp=args.keep_temp, partial_threshold=args.partial_threshold,
                              partial_len=args.partial_len, evalue=args.evalue, task=args.blast_task,
-                             homology_action=args.homology_action)
+                             homology_action=args.homology_action, artefact_action=args.artefact_action,
+                             bleed_pct=args.bleed_pct)
 
         #H_IS_Stats
         elif args.command == "is_stat":

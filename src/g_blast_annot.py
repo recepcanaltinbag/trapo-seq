@@ -47,6 +47,29 @@
 # homology_action="keep" only fills the column. Flags are matched by Query ID
 # and ignored if the flags file is older than the tab file.
 #
+# ARTEFACT FLAGS (docs/ARTEFACTS.md, src/artefacts.py): insert_finder writes
+# <tab stem>_artefacts.tsv (flank adjacency/strands, cut-site distance,
+# adapters, fold-back, plasmid self-match per call). The last column Artefact
+# lists the flags of each call ("-" = none). Here three flags are added:
+#   * one_sided_unsupported (artefact): a one-sided call labelled Genome whose
+#     genome hit overlaps no two-sided Genome call of the sample (a genome
+#     fragment joined to a plasmid read end - chimera - not a transposed
+#     segment seen with both flanks elsewhere);
+#   * single_molecule_support (caution): the call's site (same label, positions
+#     within artefacts.SITE_TOLERANCE bp) is supported by reads that could all
+#     be one molecule (one read; or a duplex/fold-back/split-read pair);
+#   * possible_bleed_through (caution; blast_annot_batch): the site has
+#     < bleed_pct % of the reads it has in another sample.
+# one_sided_cut_site is an artefact flag unless the insert is IS_DB and
+# explained >= artefacts.B1_EXPLAINED % (B1: an element next to the cut site
+# leaves a plasmid stub too short to align); then it is written as
+# one_sided_cut_site_is (caution).
+# artefact_action="flag" (default) keeps the Note; "exclude" relabels calls
+# with an artefact flag (artefacts.ARTEFACT_FLAGS + one_sided_unsupported)
+# Contamination and writes "excluded:<Note>:<flags>" in Artefact. Caution
+# flags never change the Note. Per-site support is written to
+# <output stem>_sites.tsv (artefacts.SITE_COLUMNS).
+#
 # NEEDS: blastn and makeblastdb in PATH, Biopython.
 #
 # INPUT: TAB file written by e_insert_finder_from_bam:
@@ -54,7 +77,8 @@
 #
 # OUTPUT: TAB file, exactly one row per insertion (Query ID = {read_id}_{start}_{end}):
 #   Query ID, Subject ID, Identity (%), Score, E-value, Query Start, Query End,
-#   Subject Start, Subject End, Note, Explained, ref_pos, is_Reverse, Homology
+#   Subject Start, Subject End, Note, Explained, ref_pos, is_Reverse, Homology,
+#   Artefact
 #   - Subject ID is the first token of the database FASTA header.
 #   - Identity/Score/E-value/coordinates describe the best (highest bitscore)
 #     HSP of the chosen subject; Score is the raw BLAST score.
@@ -74,6 +98,7 @@ import tempfile
 
 from Bio import SeqIO
 
+from . import artefacts as art
 from . import plasmid_genome_homology as homology
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -84,6 +109,11 @@ DEFAULT_EVALUE = 1e-10
 NOTES = ("IS_DB", "Genome", "Unannotated", "Contamination")
 HOMOLOGY_ACTIONS = ("relabel", "keep")
 HOMOLOGY_PREFIX = "shared_segment:"
+ARTEFACT_ACTIONS = ("flag", "exclude")
+ARTEFACT_EXCLUDED_PREFIX = "excluded:"
+# flags added here (see ARTEFACT FLAGS)
+EXTRA_ARTEFACT_FLAGS = ("one_sided_unsupported",)
+SITES_SUFFIX = "_sites.tsv"
 
 # An SC insert starting/ending within this many bp of a read end is a read-end
 # clip (e_insert_finder reports such gaps starting at 0 / ending at the read length).
@@ -91,7 +121,7 @@ READ_END_TOLERANCE = 20
 
 OUTPUT_COLUMNS = ["Query ID", "Subject ID", "Identity (%)", "Score", "E-value",
                   "Query Start", "Query End", "Subject Start", "Subject End",
-                  "Note", "Explained", "ref_pos", "is_Reverse", "Homology"]
+                  "Note", "Explained", "ref_pos", "is_Reverse", "Homology", "Artefact"]
 
 # Tabular BLAST columns; stitle must stay last (it may contain spaces).
 BLAST_COLUMNS = ["qseqid", "sseqid", "pident", "length", "qstart", "qend",
@@ -356,14 +386,15 @@ def insert_flanked(insert_type, query_start, query_end, read_len,
     return query_start > tolerance and query_end < read_len - tolerance
 
 
-def _format_row(query_id, note, hsp, explained, ref_pos, is_reverse, homology_value="-"):
+def _format_row(query_id, note, hsp, explained, ref_pos, is_reverse, homology_value="-",
+                artefact_value="-"):
     if hsp is None:
         vals = [query_id, "no blast hit", "N/A", "N/A", "N/A", 0, 0, 0, 0]
     else:
         vals = [query_id, hsp["subject"], hsp["pident"], hsp["score"],
                 hsp["evalue"], hsp["qstart"], hsp["qend"], hsp["sstart"],
                 hsp["send"]]
-    vals += [note, round(explained, 2), ref_pos, is_reverse, homology_value]
+    vals += [note, round(explained, 2), ref_pos, is_reverse, homology_value, artefact_value]
     return "\t".join(str(v) for v in vals) + "\n"
 
 
@@ -434,6 +465,102 @@ def load_homology_flags(tab_file, homology_flags="auto"):
     return homology.read_flagged_ids(path)
 
 
+#------------------------------------------------------------- artefacts ----
+
+def load_artefacts(tab_file, artefacts_tsv="auto"):
+    """{Query ID: artefacts row} from <tab stem>_artefacts.tsv ({} if absent,
+    off (None) or older than the tab file)."""
+    if artefacts_tsv is None:
+        return {}
+    path = art.artefacts_path_for(tab_file) if artefacts_tsv == "auto" else artefacts_tsv
+    if not os.path.isfile(path):
+        if artefacts_tsv != "auto":
+            raise FileNotFoundError(f"blast_annot: artefacts table not found: {path}")
+        return {}
+    if os.path.getmtime(path) < os.path.getmtime(tab_file):
+        print(f"Warning: {path} is older than {tab_file}; artefact flags ignored "
+              f"(re-run insert_finder)", file=sys.stderr)
+        return {}
+    return art.read_artefacts(path)
+
+
+def _plasmid_len(tab_file):
+    path = art.cut_site_path_for(tab_file)
+    if os.path.isfile(path):
+        with open(path) as fh:
+            for line in fh:
+                k, _, v = line.rstrip("\n").partition("\t")
+                if k == "plasmid_len" and v.strip():
+                    try:
+                        return int(v)
+                    except ValueError:
+                        return None
+    return None
+
+
+def _genome_interval(hsp):
+    lo, hi = sorted((hsp["sstart"], hsp["send"]))
+    return hsp["subject"], lo, hi
+
+
+def artefact_flags_for(calls, evidence, plasmid_len=None):
+    """Final flags per call (see ARTEFACT FLAGS).
+
+    calls: dicts with qname, query_id, read_id, note, hsp, explained, ref_pos.
+    evidence: {Query ID: artefacts row}. Returns ({qname: [flags]}, site rows)."""
+    flags = {}
+    two_sided_genome = []
+    for c in calls:
+        ev = evidence.get(c["query_id"])
+        a, ca = art.split_flags(ev["flags"]) if ev else ([], [])
+        fl = a + ca
+        if "one_sided_cut_site" in fl and c["note"] == "IS_DB" and c["explained"] >= art.B1_EXPLAINED:
+            fl[fl.index("one_sided_cut_site")] = "one_sided_cut_site_is"
+        flags[c["qname"]] = fl
+        if (c["note"] == "Genome" and c["hsp"] is not None and ev and ev.get("flanks") == "both"
+                and not a):
+            two_sided_genome.append(_genome_interval(c["hsp"]))
+    for c in calls:
+        fl = flags[c["qname"]]
+        if c["note"] == "Genome" and c["hsp"] is not None and "one_sided" in fl:
+            subj, lo, hi = _genome_interval(c["hsp"])
+            if not any(s == subj and lo <= h and l <= hi for s, l, h in two_sided_genome):
+                fl.append("one_sided_unsupported")
+    # sites: biological calls without artefact flags count as support
+    site_calls = []
+    for c in calls:
+        if c["note"] not in ("IS_DB", "Genome", "Unannotated"):
+            continue
+        ev = evidence.get(c["query_id"]) or {}
+        label = c["hsp"]["subject"] if c["note"] in ("IS_DB", "Genome") and c["hsp"] else c["note"]
+        pos = art._to_int(ev.get("junction"))
+        if pos is None:
+            pos = art._to_int(c["ref_pos"])
+        site_calls.append({"query_id": c["query_id"], "read_id": c["read_id"], "label": label,
+                           "pos": pos, "strand": ev.get("read_strand") or None,
+                           "start": ev.get("read_plasmid_start"), "end": ev.get("read_plasmid_end"),
+                           "artefact": is_artefact(flags[c["qname"]])})
+    sites, member = art.site_table(site_calls, plasmid_len)
+    single = {r["site_id"] for r in sites if r["single_molecule_support"]}
+    for c in calls:
+        sid = member.get(c["query_id"])
+        if sid in single and not is_artefact(flags[c["qname"]]):
+            flags[c["qname"]].append("single_molecule_support")
+    return flags, sites
+
+
+def is_artefact(flags):
+    return any(f in art.ARTEFACT_FLAGS or f in EXTRA_ARTEFACT_FLAGS for f in flags)
+
+
+def write_sites(sites, path):
+    art.write_rows(sites, path, art.SITE_COLUMNS)
+
+
+def sites_path_for(output_csv):
+    return os.path.splitext(output_csv)[0] + SITES_SUFFIX
+
+
 #----------------------------------------------------------------- main -----
 
 def _remove(paths):
@@ -451,7 +578,8 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
                temp_dir="temp", output_csv="best_alignment.tab", threshold=70,
                threads=2, debug=False, keep_temp=False, partial_threshold=80,
                partial_len=8000, evalue=DEFAULT_EVALUE, db_dir=None,
-               task="megablast", homology_flags="auto", homology_action="relabel"):
+               task="megablast", homology_flags="auto", homology_action="relabel",
+               artefacts_tsv="auto", artefact_action="flag"):
     """Annotate all insertions of one sample. Writes `output_csv` and returns
     a dict {Query ID: Note}.
 
@@ -459,6 +587,10 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
     <tab stem>_homology_flags.tsv next to tab_file if present; None: off).
     homology_action: "relabel" (flagged calls -> Contamination) or "keep"
     (Note unchanged); both fill the Homology column (see PLASMID-GENOME HOMOLOGY).
+    artefacts_tsv: artefact evidence of insert_finder ("auto": <tab stem>_artefacts.tsv
+    next to tab_file if present; None: off). artefact_action: "flag" (Note kept,
+    flags in column Artefact) or "exclude" (calls with an artefact flag are
+    relabelled Contamination); see ARTEFACT FLAGS. Writes <output stem>_sites.tsv.
 
     is_fasta=None uses src/dummy_is_file.fasta. BLAST DBs are built in
     `db_dir` (default: <temp_dir>/blastdb). Unless keep_temp, the files this
@@ -472,7 +604,10 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
             raise FileNotFoundError(f"blast_annot: {label} not found: {path}")
     if homology_action not in HOMOLOGY_ACTIONS:
         raise ValueError(f"homology_action must be one of {HOMOLOGY_ACTIONS}, not {homology_action!r}")
+    if artefact_action not in ARTEFACT_ACTIONS:
+        raise ValueError(f"artefact_action must be one of {ARTEFACT_ACTIONS}, not {artefact_action!r}")
     flagged = load_homology_flags(tab_file, homology_flags)
+    evidence = load_artefacts(tab_file, artefacts_tsv)
     print(f'Settings: Threshold: {threshold}, Threads: {threads}, E-value: {evalue}, '
           f'Debugging: {debug}, Partial Threshold: {partial_threshold}, Partial Len: {partial_len}')
 
@@ -540,6 +675,11 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
     is_flagged = {c[0] for c in classified if c[1] in flagged}
     contam = [c[0] for c in classified if c[2] == "Contamination" and c[0] not in is_flagged]
     anchors = [c[0] for c in classified if c[2] == "Unannotated" and c[0] not in is_flagged]
+    if artefact_action == "exclude":
+        # chimeric inserts must not vouch for read-end clips
+        bad = {c[0] for c in classified
+               if art.split_flags((evidence.get(c[1]) or {}).get("flags"))[0]}
+        anchors = [q for q in anchors if q not in bad]
     if contam and anchors:
         rescue_dir = os.path.join(temp_dir, f"{tag}_unannotated_db")
         created.append(rescue_dir)
@@ -548,6 +688,7 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
     notes = {}
     rows = []
     n_flagged = 0
+    final = []
     for qname, query_id, note, hsp, explained, ref_pos, is_reverse, qual in classified:
         if qname in rescued:
             note = "Unannotated"
@@ -557,18 +698,36 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
             homology_value = HOMOLOGY_PREFIX + note
             if homology_action == "relabel":
                 note = "Contamination"
+        final.append({"qname": qname, "query_id": query_id, "read_id": query_id.rsplit("_", 2)[0],
+                      "note": note, "hsp": hsp, "explained": explained, "ref_pos": ref_pos,
+                      "is_reverse": is_reverse, "qual": qual, "homology": homology_value})
+    art_flags, sites = artefact_flags_for(final, evidence, _plasmid_len(tab_file))
+    n_art, n_excluded = 0, 0
+    for c in final:
+        note, fl = c["note"], art_flags.get(c["qname"], [])
+        artefact_value = ",".join(fl) or "-"
+        if is_artefact(fl):
+            n_art += 1
+            if artefact_action == "exclude":
+                artefact_value = f"{ARTEFACT_EXCLUDED_PREFIX}{note}:{artefact_value}"
+                if note != "Contamination":
+                    n_excluded += 1
+                note = "Contamination"
         if debug:
-            print(query_id, note, f"explained={explained:.2f}",
-                  hsp["subject"] if hsp else "", f"quality={qual}",
-                  "(read-end clip matching a flanked Unannotated insert)" if qname in rescued else "")
-        notes[query_id] = note
-        rows.append(_format_row(query_id, note, hsp, explained, ref_pos, is_reverse, homology_value))
+            print(c["query_id"], note, f"explained={c['explained']:.2f}",
+                  c["hsp"]["subject"] if c["hsp"] else "", f"quality={c['qual']}",
+                  "(read-end clip matching a flanked Unannotated insert)" if c["qname"] in rescued else "",
+                  artefact_value)
+        notes[c["query_id"]] = note
+        rows.append(_format_row(c["query_id"], note, c["hsp"], c["explained"], c["ref_pos"],
+                                c["is_reverse"], c["homology"], artefact_value))
 
     out_dir = os.path.dirname(os.path.abspath(output_csv))
     os.makedirs(out_dir, exist_ok=True)
     with open(output_csv, 'w') as out_file:
         out_file.write("\t".join(OUTPUT_COLUMNS) + "\n")
         out_file.write(''.join(rows))
+    write_sites(sites, sites_path_for(output_csv))
 
     if not keep_temp:
         _remove(created)
@@ -586,5 +745,11 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
               f"plasmid-flanked through a shared segment" +
               (" and were labelled Contamination" if homology_action == "relabel" else
                " (Note kept, see column Homology)"))
+    if evidence:
+        print(f"Artefact flags: {n_art} call(s) carry an artefact flag" +
+              (f"; {n_excluded} relabelled Contamination (--artefact_action exclude)"
+               if artefact_action == "exclude" else " (Note kept, see column Artefact)"))
+    else:
+        print("Artefact flags: no artefacts table from insert_finder (re-run it to get flank/chimera checks)")
     print(f"Outputs {output_csv} were recorded.")
     return notes

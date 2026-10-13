@@ -78,6 +78,24 @@ Conventions scored against
   rate from 08_mapping_stats.txt (corrected and uncorrected) next to the true
   one (insertion reads / plasmid reads).
 
+* Artefacts (section "artefacts", docs/ARTEFACTS.md). Simulator categories
+  chimera_plasmid_plasmid, chimera_plasmid_genome, chimera_plasmid_foreign,
+  ligation_chimera and dimer are built from empty plasmids and foreign DNA, so
+  any call on them is false; they count as negatives in the detection
+  metrics (false_calls_<category>), like empty_plasmid. foldback reads may
+  carry a real insertion and are left out of precision/recall. Flags come
+  from the Artefact column of best_alignment.tab (annotation level) and
+  <barcode>/insertion_from_bam_artefacts.tsv (finder level). An ARTEFACT flag
+  is one of ARTEFACT_FLAGS (src/artefacts.py) or one_sided_unsupported;
+  "excluded:<Note>:<flags>" (blast_annot --artefact_action exclude) gives the
+  Note before exclusion. Per truth category: reads, reads with a call before
+  flagging ("before": annotation Note before exclusion in IS_DB / Genome /
+  Unannotated; finder: any row), reads with a call that carries no artefact
+  flag ("after": what --artefact_action exclude keeps), flag sensitivity
+  (1 - after / before), and how often each flag was raised. For true
+  insertions: reads with an artefact-flagged call ("flagged") and reads that
+  would lose every call ("lost"), plus caution flags separately.
+
 Only the Python standard library is used.
 """
 
@@ -93,6 +111,15 @@ from collections import Counter, defaultdict
 
 INSERTION_CATS = ("is_insertion", "novel_insertion")
 NEGATIVE_CATS = ("empty_plasmid", "deletion", "contamination")
+# simulator artefact categories (--chimera_rate etc.): negatives when present
+ARTEFACT_NEG_CATS = ("chimera_plasmid_plasmid", "chimera_plasmid_genome", "chimera_plasmid_foreign",
+                     "ligation_chimera", "dimer")
+ARTEFACT_CATS = ARTEFACT_NEG_CATS + ("foldback",)
+# src/artefacts.ARTEFACT_FLAGS + g_blast_annot's one_sided_unsupported (kept in sync by a test)
+ARTEFACT_FLAGS = ("nonadjacent_flanks", "strand_flip", "unaligned_flank", "cut_site_junction",
+                  "overhang_dr", "one_sided_cut_site", "internal_adapter", "foldback", "plasmid_self",
+                  "one_sided_unsupported")
+EXCLUDED_PREFIX = "excluded:"
 NOTE_PRIORITY = {"IS_DB": 0, "Genome": 1, "Unannotated": 2, "Contamination": 3}
 CALL_NOTES = ("IS_DB", "Genome", "Unannotated")   # biological insertion calls
 NOTE_NAMES = ("IS_DB", "Genome", "Unannotated", "Contamination")
@@ -342,12 +369,37 @@ def parse_annot(path):
             "note": (rec.get("Note") or "").strip(),
             "ref_pos": to_int(rec.get("ref_pos")),
             "homology": (rec.get("Homology") or "-").strip(),
+            "artefact": (rec.get("Artefact") or "-").strip(),
         })
     for r in rows:
         h = r["homology"]
         r["homology_flagged"] = h.startswith(HOMOLOGY_PREFIX)
         r["note_unflagged"] = h[len(HOMOLOGY_PREFIX):] if r["homology_flagged"] else r["note"]
+        r["note_preexclude"], r["art_flags"] = parse_artefact_value(r["artefact"], r["note"])
+        r["art_hard"] = any(f in ARTEFACT_FLAGS for f in r["art_flags"])
     return rows
+
+
+def parse_artefact_value(value, note):
+    """Artefact column -> (Note before exclusion, [flags])."""
+    v = (value or "-").strip()
+    if v.startswith(EXCLUDED_PREFIX):
+        parts = v.split(":", 2)
+        note = parts[1] if len(parts) > 1 else note
+        v = parts[2] if len(parts) > 2 else ""
+    return note, [f for f in v.split(",") if f and f != "-"]
+
+
+def parse_artefact_table(path):
+    """insertion_from_bam_artefacts.tsv -> list of dicts (read_id, flags) or None."""
+    if not path or not os.path.exists(path):
+        return None
+    out = []
+    for rec in read_tsv(path):
+        fl = [f for f in (rec.get("flags") or "-").split(",") if f and f != "-"]
+        out.append({"read_id": rec.get("read_id"), "flags": fl,
+                    "hard": any(f in ARTEFACT_FLAGS for f in fl)})
+    return out
 
 
 def parse_dr(path):
@@ -385,8 +437,9 @@ def load_predictions(results_dir, barcode):
     dr = first_existing(os.path.join(glob.escape(results_dir), "insertions", f"{barcode}_insertions.csv"),
                         os.path.join(glob.escape(bdir), "*insertions*.csv"))
     stats = os.path.join(bdir, "08_mapping_stats.txt")
+    arts = first_existing(os.path.join(glob.escape(bdir), "insertion_from_bam_artefacts.tsv"))
     return {"finder": parse_finder(finder), "annot": parse_annot(annot), "dr": parse_dr(dr),
-            "mapping_stats": parse_mapping_stats(stats),
+            "mapping_stats": parse_mapping_stats(stats), "artefacts": parse_artefact_table(arts),
             "files": {"finder": finder, "annot": annot, "dr": dr,
                       "mapping_stats": stats if os.path.exists(stats) else None}}
 
@@ -521,6 +574,7 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
     finder_by, finder_unmatched = group_by_read(preds["finder"], resolve)
     annot_by, annot_unmatched = group_by_read(preds["annot"], resolve)
     dr_by, dr_unmatched = group_by_read(preds["dr"], resolve)
+    art_by, _ = group_by_read(preds.get("artefacts"), resolve)
     have_finder, have_annot, have_dr = (preds[k] is not None for k in ("finder", "annot", "dr"))
 
     cats = Counter(t["category"] for t in truth_rows)
@@ -570,11 +624,21 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
                 rec["class_ok"] = novel_ok(ap)
                 rec["class_ok_any_row"] = any(novel_ok(r) for r in arows)
         rec["_ap"], rec["_arows"] = ap, arows
+        frs = art_by.get(rid, [])
+        rec["finder_art_flags"] = ",".join(sorted({f for x in frs for f in x["flags"]}))
+        rec["finder_called_unflagged"] = bool(frows) and (not frs or any(not x["hard"] for x in frs)
+                                                          or len(frs) < len(frows))
+        calls_pre = [x for x in arows if x["note_preexclude"] in CALL_NOTES]
+        rec["art_flags"] = ",".join(sorted({f for x in arows for f in x["art_flags"]}))
+        rec["art_called_before"] = bool(calls_pre)
+        rec["art_called_after"] = any(not x["art_hard"] for x in calls_pre)
+        rec["art_call_flagged"] = any(x["art_hard"] for x in calls_pre)
         rec["annot_notes_unflagged_all"] = ",".join(sorted({r["note_unflagged"] for r in arows}))
         per_read.append(rec)
 
     pos_reads = [r for r in per_read if r["category"] in INSERTION_CATS]
-    neg_reads = [r for r in per_read if r["category"] in NEGATIVE_CATS]
+    neg_cats = NEGATIVE_CATS + tuple(c for c in ARTEFACT_NEG_CATS if c in cats)
+    neg_reads = [r for r in per_read if r["category"] in neg_cats]
     eligible = [r for r in pos_reads if not r["fragmented"] and (r["read_len"] or 0) >= min_read_len]
 
     # ---- read-level detection, insert finder and annotation stages
@@ -591,7 +655,7 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
         d = {"available": True, "tp": tp, "fp": fp_, "fn": fn, "precision": p, "recall": rc, "f1": f1(p, rc),
              "recall_unfragmented_eligible": ratio(tp_el, len(eligible)), "n_unfragmented_eligible": len(eligible),
              "tp_correct_position": tp_pos, "recall_correct_position": ratio(tp_pos, len(pos_reads))}
-        for cat in NEGATIVE_CATS:
+        for cat in neg_cats:
             rs = [r for r in neg_reads if r["category"] == cat]
             n = sum(is_called(r) for r in rs)
             d[f"false_calls_{cat}"] = n
@@ -660,6 +724,10 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
     res["homology"] = homology_metrics(per_read, have_annot,
                                        None if homology_segments is None else len(homology_segments),
                                        preds.get("mapping_stats"))
+
+    # ---- artefacts (chimeras, ligation at the cut site, dimers, fold-backs)
+    res["artefacts"] = artefact_metrics(per_read, have_finder and preds.get("artefacts") is not None,
+                                        have_annot)
 
     # ---- TSD / DR
     res["tsd"] = dict(tsd_metrics(pos_reads, plen), unmatched_read_ids=dr_unmatched) if have_dr else {"available": False}
@@ -746,6 +814,46 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
     return res, per_read, sites
 
 
+def artefact_metrics(per_read, have_art, have_annot):
+    """Section "artefacts" (see module docstring); per_read may span barcodes."""
+    if not have_art and not have_annot:
+        return {"available": False}
+    d = {"available": True}
+    cats = sorted({r["category"] for r in per_read})
+    tot_b = tot_a = 0
+    for cat in cats:
+        rs = [r for r in per_read if r["category"] == cat]
+        o = {"reads": len(rs)}
+        if have_art:
+            fb = sum(r["n_finder_rows"] > 0 for r in rs)
+            fa = sum(r["n_finder_rows"] > 0 and r["finder_called_unflagged"] for r in rs)
+            o.update(finder_called_before=fb, finder_called_after=fa,
+                     finder_flag_sensitivity=ratio(fb - fa, fb))
+        if have_annot:
+            b = sum(r["art_called_before"] for r in rs)
+            a = sum(r["art_called_after"] for r in rs)
+            o.update(called_before=b, called_after=a, flag_sensitivity=ratio(b - a, b),
+                     reads_with_flagged_call=sum(r["art_call_flagged"] for r in rs))
+            if cat in ARTEFACT_NEG_CATS or cat in NEGATIVE_CATS:
+                tot_b += b
+                tot_a += a
+        fc = Counter(f for r in rs for f in set((r.get("art_flags") or r.get("finder_art_flags") or "").split(","))
+                     if f)
+        o["flags"] = ";".join(f"{k}:{v}" for k, v in sorted(fc.items())) or "-"
+        d[cat] = o
+    if have_annot:
+        d["false_calls_before_total"] = tot_b
+        d["false_calls_after_total"] = tot_a
+        pos = [r for r in per_read if r["category"] in INSERTION_CATS and r["art_called_before"]]
+        d["true_insertion_reads_called"] = len(pos)
+        d["flagged_true_insertions"] = sum(r["art_call_flagged"] for r in pos)
+        d["lost_true_insertions"] = sum(not r["art_called_after"] for r in pos)
+        caution = Counter(f for r in pos for f in set((r.get("art_flags") or "").split(","))
+                          if f and f not in ARTEFACT_FLAGS)
+        d["caution_flags_true_insertions"] = ";".join(f"{k}:{v}" for k, v in sorted(caution.items())) or "-"
+    return d
+
+
 def homology_metrics(per_read, have_annot, n_segments, mapping_stats=None):
     """Section "homology" (see module docstring); per_read may span barcodes."""
     if not have_annot:
@@ -804,8 +912,10 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
                                                       for d in ds if d["recall_unfragmented_eligible"] is not None), n_el)
         o["tp_correct_position"] = sum(d["tp_correct_position"] for d in ds)
         o["recall_correct_position"] = ratio(o["tp_correct_position"], tp + fn)
-        for cat in NEGATIVE_CATS:
-            o[f"false_calls_{cat}"] = sum(d[f"false_calls_{cat}"] for d in ds)
+        for cat in NEGATIVE_CATS + ARTEFACT_NEG_CATS:
+            if not any(f"false_calls_{cat}" in d for d in ds):
+                continue
+            o[f"false_calls_{cat}"] = sum(d.get(f"false_calls_{cat}", 0) for d in ds)
             n = sum(1 for r in per_read_all if r["category"] == cat)
             o[f"false_call_rate_{cat}"] = ratio(o[f"false_calls_{cat}"], n)
         for cat in INSERTION_CATS:
@@ -876,6 +986,13 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
         overall["homology"] = o
     else:
         overall["homology"] = {"available": False}
+    av = [b["artefacts"] for b in per_barcode.values() if b.get("artefacts", {}).get("available")]
+    if av:
+        def has(key):
+            return any(isinstance(v, dict) and key in v for x in av for v in x.values())
+        overall["artefacts"] = artefact_metrics(per_read_all, has("finder_called_before"), has("called_before"))
+    else:
+        overall["artefacts"] = {"available": False}
     overall["truth_counts"] = dict(Counter(r["category"] for r in per_read_all))
     return overall
 
@@ -969,6 +1086,8 @@ SUMMARY_KEYS = [
     ("sites", "event_recall"), ("sites", "site_precision"), ("sites", "spurious_sites"),
     ("homology", "false_calls_homology_before"), ("homology", "false_calls_homology_after"),
     ("homology", "flagged_true_insertions"),
+    ("artefacts", "false_calls_before_total"), ("artefacts", "false_calls_after_total"),
+    ("artefacts", "flagged_true_insertions"), ("artefacts", "lost_true_insertions"),
     ("tsd", "pct_tsd_reported_nonzero"), ("tsd", "length_accuracy"), ("tsd", "sequence_accuracy"),
     ("tsd", "consistent_accuracy"), ("tsd", "consistent_accuracy_when_reported"),
 ]

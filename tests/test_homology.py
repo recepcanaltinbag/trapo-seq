@@ -142,9 +142,9 @@ def test_load_homology_flags(tmp_path):
 
 def test_stats_report_homology_flagged(tmp_path):
     cols = OUTPUT_COLUMNS
-    rows = [["q1", "IS5_IS5", 99, 900, 0, 1, 900, 1, 900, "IS_DB", 99, 10, False, "-"],
+    rows = [["q1", "IS5_IS5", 99, 900, 0, 1, 900, 1, 900, "IS_DB", 99, 10, False, "-", "-"],
             ["q2", "chr", 99, 900, 0, 1, 900, 1, 900, "Contamination", 99, 10, False,
-             HOMOLOGY_PREFIX + "Genome"]]
+             HOMOLOGY_PREFIX + "Genome", "-"]]
     os.makedirs(tmp_path / "bc1")
     pd.DataFrame(rows, columns=cols).to_csv(tmp_path / "bc1" / "best_alignment.tab", sep="\t", index=False)
     s = h_is_stats.summarize_condition(str(tmp_path / "bc1" / "best_alignment.tab"))

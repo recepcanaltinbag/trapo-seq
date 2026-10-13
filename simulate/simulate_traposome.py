@@ -153,6 +153,52 @@ options and "homology_segments". All of this randomness comes from a separate
 random stream created only when --homology_len is given (the main stream draws
 for a contamination read are made as before and then overridden), so the
 default outputs are byte-identical to earlier versions.
+
+Library and sequencing artefacts (docs/ARTEFACTS.md)
+----------------------------------------------------
+Each option adds round(RATE x --reads) EXTRA reads per barcode, written after
+the normal reads (IDs continue the numbering); the normal reads, clones.tsv and
+every other output stay byte-identical to a run without the option (the
+artefact reads come from their own random stream, seeded from --seed, and in
+ont mode from their own error-model stream). truth.tsv gains the column
+artefact_detail (piece list: plasmid:STRAND:START-END are coordinates on the
+linear molecule, genome:CONTIG:START-END:STRAND, foreign:LEN, adapter:STRAND).
+  --chimera_rate R          two or three molecules read as one (ONT chimeras),
+                            category chimera_plasmid_plasmid (P+P),
+                            chimera_plasmid_genome (P+G, G+P or P+G+P) or
+                            chimera_plasmid_foreign (random DNA instead of
+                            genome); types picked uniformly from
+                            --chimera_types. Plasmid pieces are empty linear
+                            plasmids, fragmented (random 500 bp+ piece) with
+                            probability 0.5, each on a random strand; genome
+                            pieces 500-20000 bp (lognormal), foreign 500-5000
+                            bp. With probability --chimera_adapter_frac
+                            (default 0.5) a junction carries an adapter (the
+                            ONT ligation Y-adapter top-strand prefix of
+                            src/artefacts.py plus 10-30 random bases).
+  --ligation_chimera_rate R ligation_chimera: a genome (or, half of the time,
+                            foreign) fragment ligated to the end of a full
+                            linear plasmid: plasmid+X, X+plasmid or
+                            plasmid+X+plasmid (equally likely).
+  --overhang SEQ|N          5' overhang of the enzyme (a sequence, or N = the
+                            first N plasmid bases at the cut site). End-repair
+                            fills it in, so EVERY linear plasmid molecule
+                            (normal reads too) ends with the overhang copied
+                            after its last base; a ligation junction then shows
+                            the overhang as an apparent DR. Changes the normal
+                            reads (default: blunt, no change).
+  --dimer_rate R            dimer: two full linear plasmids head to tail
+                            (in vivo dimer cut at one site, or a ligation
+                            dimer with the filled-in overhang at the junction),
+                            head to head (inverted) with probability 0.25.
+  --foldback_rate R         foldback: read = X + revcomp(X[c:]) where X is a
+                            normal molecule (empty plasmid, or an insertion
+                            clone with probability --insertion_rate) from its
+                            start to a random fold point (>= 1000 bp) and
+                            c < fold point - 500. Clone fields are filled for
+                            clone molecules (clone n_reads is not changed).
+Artefact pieces are drawn from the empty plasmid (except foldback), so every
+insertion call on a chimera/ligation/dimer read is false.
 """
 
 import argparse
@@ -682,6 +728,12 @@ HOMOLOGY_FIELDS = ["segment_id", "plasmid_start", "plasmid_end", "length", "geno
 HOMOLOGY_MARGIN = 5000
 HOMOLOGY_MIN_OVERLAP = 100
 
+# Artefact reads (--chimera_rate etc.). The adapter is the ONT ligation-kit
+# Y-adapter top-strand prefix, the same motif src/artefacts.py searches for.
+SIM_ADAPTER = "AATGTACTTCGTTCAGTTACGTATTGCT"
+CHIMERA_TYPES = ("plasmid_plasmid", "plasmid_genome", "plasmid_foreign")
+ARTEFACT_OPTIONS = ("chimera_rate", "ligation_chimera_rate", "dimer_rate", "foldback_rate")
+
 
 def plant_homology(args, plasmid, genome, elements, hrng):
     """Copy --n_homology plasmid segments into the genome (replacing genome
@@ -744,6 +796,142 @@ def homology_contamination(hrng, segments, genome_by_name, length):
     hi = min(len(gseq) - length, seg["genome_end"] - ov)
     start = hrng.randint(lo, max(lo, hi))
     return seg["genome_contig"], start, gseq[start:start + length]
+
+
+def overhang_seq(spec, plasmid, cut):
+    """--overhang: a sequence, or an integer N = plasmid[cut:cut+N] (circular)."""
+    if not spec:
+        return ""
+    spec = str(spec).strip().upper()
+    if spec.isdigit():
+        n = int(spec)
+        return (plasmid + plasmid)[cut:cut + n]
+    return spec
+
+
+class ArtefactReads:
+    """Builds the extra artefact reads of one barcode (own random stream)."""
+
+    def __init__(self, args, rng, plasmid, cut, oh, genome, ont):
+        self.args, self.rng, self.plasmid, self.cut, self.oh = args, rng, plasmid, cut, oh
+        self.genome, self.ont = genome, ont
+        self.empty = linearise(plasmid, cut, None, 0) + oh
+
+    def plasmid_piece(self, fragment_prob=0.5):
+        rng, mol = self.rng, self.empty
+        a, b = 0, len(mol)
+        if rng.random() < fragment_prob and len(mol) > 1000:
+            a = rng.randrange(0, len(mol) - 500)
+            b = rng.randrange(a + 500, len(mol) + 1)
+        strand = rng.choice("+-")
+        seq = mol[a:b]
+        return (seq if strand == "+" else revcomp(seq)), f"plasmid:{strand}:{a}-{b}"
+
+    def genome_piece(self):
+        rng = self.rng
+        contig, gseq = rng.choice(self.genome)
+        length = min(len(gseq), max(500, min(20000, int(rng.lognormvariate(8.0, 0.6)))))
+        start = rng.randrange(0, len(gseq) - length + 1)
+        strand = rng.choice("+-")
+        seq = gseq[start:start + length]
+        return (seq if strand == "+" else revcomp(seq)), f"genome:{contig}:{start}-{start + length}:{strand}"
+
+    def foreign_piece(self):
+        n = self.rng.randint(500, 5000)
+        return random_seq(self.rng, n), f"foreign:{n}"
+
+    def adapter(self):
+        rng = self.rng
+        ad = SIM_ADAPTER + random_seq(rng, rng.randint(10, 30))
+        strand = rng.choice("+-")
+        return (ad if strand == "+" else revcomp(ad)), f"adapter:{strand}"
+
+    def join(self, pieces):
+        """Join (seq, desc) pieces; each junction carries an adapter with
+        probability --chimera_adapter_frac."""
+        seqs, descs = [pieces[0][0]], [pieces[0][1]]
+        for seq, desc in pieces[1:]:
+            if self.rng.random() < self.args.chimera_adapter_frac:
+                a, d = self.adapter()
+                seqs.append(a)
+                descs.append(d)
+            seqs.append(seq)
+            descs.append(desc)
+        return "".join(seqs), "|".join(descs)
+
+    def chimera(self):
+        rng = self.rng
+        kind = rng.choice(self.args.chimera_types)
+        if kind == "plasmid_plasmid":
+            pieces = [self.plasmid_piece(), self.plasmid_piece()]
+        else:
+            other = self.genome_piece() if kind == "plasmid_genome" else self.foreign_piece()
+            layout = rng.randrange(3)
+            if layout == 0:
+                pieces = [self.plasmid_piece(), other]
+            elif layout == 1:
+                pieces = [other, self.plasmid_piece()]
+            else:
+                pieces = [self.plasmid_piece(), other, self.plasmid_piece()]
+        mol, desc = self.join(pieces)
+        return "chimera_" + kind, mol, desc
+
+    def ligation_chimera(self):
+        rng = self.rng
+        x, xd = self.genome_piece() if rng.random() < 0.5 else self.foreign_piece()
+        mol = self.empty
+        layout = rng.randrange(3)
+        if layout == 0:
+            seq, desc = mol + x, f"plasmid:+:0-{len(mol)}|{xd}"
+        elif layout == 1:
+            seq, desc = x + mol, f"{xd}|plasmid:+:0-{len(mol)}"
+        else:
+            seq, desc = mol + x + mol, f"plasmid:+:0-{len(mol)}|{xd}|plasmid:+:0-{len(mol)}"
+        if rng.random() < 0.5:
+            seq, desc = revcomp(seq), desc + "|read:-"
+        return "ligation_chimera", seq, desc
+
+    def dimer(self):
+        rng = self.rng
+        mol = self.empty
+        if rng.random() < 0.5:        # in vivo dimer cut at one of its two sites
+            unit = mol[:len(mol) - len(self.oh)] if self.oh else mol
+            first, how = unit, "in_vivo"
+        else:                          # ligation of two filled-in linear molecules
+            first, how = mol, "ligation"
+        second, orient = (mol, "head_to_tail") if rng.random() >= 0.25 else (revcomp(mol), "head_to_head")
+        seq = first + second
+        if rng.random() < 0.5:
+            seq = revcomp(seq)
+        return "dimer", seq, f"dimer:{how}:{orient}"
+
+    def foldback(self, clones, weights, rate):
+        rng = self.rng
+        rec = {}
+        if clones and rng.random() < rate:
+            clone = rng.choices(clones, weights=weights, k=1)[0]
+            extra = clone["insert_len"] + clone["tsd_len"]
+            mol = linearise(clone["_construct"], self.cut, clone["ref_pos"] + clone["tsd_len"] - 1,
+                            extra) + self.oh
+            rec = {k: clone[k] for k in ("clone_id", "element", "element_family", "ref_pos", "orientation",
+                                         "tsd_len", "tsd_seq", "insert_len", "genome_contig",
+                                         "genome_start", "genome_end")}
+        else:
+            mol = self.empty
+        b = rng.randint(min(1000, len(mol)), len(mol))
+        c = rng.randint(0, max(0, b - 500))
+        seq = mol[:b] + revcomp(mol[c:b])
+        if rng.random() < 0.5:
+            seq = revcomp(seq)
+        return "foldback", seq, f"fold:0-{b}|rc:{c}-{b}", rec
+
+    def sequence(self, mol):
+        """(read, quality, stats) with the run's error model (artefact streams)."""
+        if self.ont is not None:
+            return self.ont.read(mol, 0, len(mol), "+")
+        a = self.args
+        seq = add_errors(mol, self.rng, a.sub, a.ins, a.dele)
+        return seq, quality_string(len(seq), self.rng, a.mean_q), {}
 
 
 ELEMENT_FIELDS = ["element_id", "length", "tir_len", "tir_left", "tir_right", "tir_mismatches",
@@ -863,6 +1051,21 @@ def parse_args(argv=None):
     ap.add_argument("--homology_contam_frac", type=float, default=0.5,
                     help="With --homology_len: fraction of contamination reads drawn to overlap a "
                          "shared segment's genome copy (default 0.5)")
+    ap.add_argument("--chimera_rate", type=float, default=0.0,
+                    help="Extra chimeric reads per barcode, as a fraction of --reads (default 0)")
+    ap.add_argument("--chimera_types", nargs="+", choices=CHIMERA_TYPES, default=list(CHIMERA_TYPES),
+                    help="Chimera kinds drawn uniformly (default all)")
+    ap.add_argument("--chimera_adapter_frac", type=float, default=0.5,
+                    help="Probability that a chimera junction carries an adapter (default 0.5)")
+    ap.add_argument("--ligation_chimera_rate", type=float, default=0.0,
+                    help="Extra reads with genome/foreign DNA ligated at the cut site, fraction of --reads (default 0)")
+    ap.add_argument("--overhang", default=None,
+                    help="5' overhang at the cut site (sequence, or a length N = plasmid[cut:cut+N]); "
+                         "filled in at every linear molecule end (default: blunt)")
+    ap.add_argument("--dimer_rate", type=float, default=0.0,
+                    help="Extra plasmid dimer reads, fraction of --reads (default 0)")
+    ap.add_argument("--foldback_rate", type=float, default=0.0,
+                    help="Extra fold-back reads (X + revcomp(X)), fraction of --reads (default 0)")
     ap.add_argument("--tsd", nargs="*", default=[], metavar="FAMILY=LEN", help="Override TSD lengths, e.g. IS4=10 Tn3=5")
     ap.add_argument("--seed", type=int, default=1, help="Random seed (default 1)")
     args = ap.parse_args(argv)
@@ -880,6 +1083,14 @@ def parse_args(argv=None):
         ap.error("--homology_identity must be in [0.5, 1]")
     if not 0 <= args.homology_contam_frac <= 1:
         ap.error("--homology_contam_frac must be in [0, 1]")
+    for k in ARTEFACT_OPTIONS:
+        if not 0 <= getattr(args, k) <= 1:
+            ap.error(f"--{k} must be in [0, 1]")
+    if not 0 <= args.chimera_adapter_frac <= 1:
+        ap.error("--chimera_adapter_frac must be in [0, 1]")
+    if args.overhang is not None and not (str(args.overhang).isdigit() or
+                                          set(str(args.overhang).upper()) <= set("ACGT")):
+        ap.error("--overhang takes a DNA sequence or a length")
     if args.error_model == "ont":
         for k, v in ONT_PROFILES[args.ont_profile].items():
             if getattr(args, k) is None:
@@ -936,6 +1147,21 @@ def main(argv=None):
     if ont is not None:
         truth_fields += ONT_TRUTH_FIELDS
     truth_fields += var_fields
+    # overhang and artefact reads: own random streams, only when enabled (defaults byte-identical)
+    oh = overhang_seq(args.overhang, plasmid, cut)
+    if args.overhang and not str(args.overhang).isdigit() and oh != (plasmid + plasmid)[cut:cut + len(oh)]:
+        print(f"Warning: --overhang {oh} is not the plasmid sequence at the cut site "
+              f"({(plasmid + plasmid)[cut:cut + len(oh)]})", file=sys.stderr)
+    artefacts_on = any(getattr(args, k) > 0 for k in ARTEFACT_OPTIONS)
+    art = None
+    if artefacts_on:
+        art_ont = None
+        if ont is not None:
+            art_ont = OntErrorModel(random.Random(f"artefact-ont-errors-{args.seed}"), args.read_accuracy_mean,
+                                    args.read_accuracy_sd, args.ont_sub_frac, args.ont_ins_frac,
+                                    args.ont_del_frac, args.homopolymer_factor)
+        art = ArtefactReads(args, random.Random(f"artefacts-{args.seed}"), plasmid, cut, oh, genome, art_ont)
+        truth_fields += ["artefact_detail"]
     clone_fields = ["barcode", "clone_id", "category", "element", "element_family", "ref_pos",
                     "orientation", "tsd_len", "tsd_seq", "insert_len", "genome_contig",
                     "genome_start", "genome_end", "weight", "n_reads"] + var_fields
@@ -1043,6 +1269,8 @@ def main(argv=None):
                 else:
                     mol = linearise(plasmid, cut, None, 0)
                     rec.update(category="empty_plasmid")
+                if oh and rec["category"] != "contamination":
+                    mol = mol + oh          # filled-in 5' overhang at the molecule end
 
                 a, b_ = 0, len(mol)
                 if rng.random() < args.fragment_rate and len(mol) > 1000:
@@ -1068,6 +1296,29 @@ def main(argv=None):
                 fq.write(f"@{rid}\n{seq}\n+\n{quality_string(len(seq), rng, args.mean_q)}\n")
                 truth.writerow(rec)
 
+            if art is not None:
+                jobs = []
+                for k in ARTEFACT_OPTIONS:
+                    jobs += [k] * int(round(getattr(args, k) * args.reads))
+                for i, kind in enumerate(jobs):
+                    rid = f"{bc}_r{args.reads + i:06d}"
+                    rec = {f: "" for f in truth_fields}
+                    rec.update(barcode=bc, read_id=rid, fragmented=False)
+                    if kind == "chimera_rate":
+                        cat, mol, desc = art.chimera()
+                    elif kind == "ligation_chimera_rate":
+                        cat, mol, desc = art.ligation_chimera()
+                    elif kind == "dimer_rate":
+                        cat, mol, desc = art.dimer()
+                    else:
+                        cat, mol, desc, crec = art.foldback(clones, weights, rate)
+                        rec.update(crec)
+                    seq, qual, stats = art.sequence(mol)
+                    rec.update(stats)
+                    rec.update(category=cat, artefact_detail=desc, read_strand="+", read_len=len(seq))
+                    fq.write(f"@{rid}\n{seq}\n+\n{qual}\n")
+                    truth.writerow(rec)
+
         for c in clones:
             clones_out.writerow({k: v for k, v in c.items() if not k.startswith("_")})
 
@@ -1086,6 +1337,13 @@ def main(argv=None):
                 params.pop(k)
         else:
             params["homology_segments"] = homology_segments
+        if not artefacts_on:
+            for k in ARTEFACT_OPTIONS + ("chimera_types", "chimera_adapter_frac"):
+                params.pop(k)
+        if args.overhang is None:
+            params.pop("overhang")
+        else:
+            params["overhang_seq"] = oh
         if args.novel_mode == "segment":
             # keep simulation.json identical to earlier versions in the default mode
             for k in ("novel_mode", "n_novel_elements", "element_len", "tir_len", "tir_mismatch",

@@ -47,6 +47,13 @@ empty when it cannot be computed.
 ``Status`` - DR, no_duplication, target_site_deletion, repeat_too_long,
 left_flank_only, right_flank_only, no_flank_hit, strand_conflict,
 read_not_found, bad_query_id.
+``Artefact`` - the Artefact column of best_alignment.tab ("-" = no flag). A
+call with an ARTEFACT flag (src/artefacts.py: chimera, ligation at the cut
+site, fold-back, adapter, plasmid self-match, unsupported one-sided genome
+clip) is still analysed, but its Subject ID is written as ``Artefact`` so that
+dr_logo draws it in a separate logo and its apparent repeat (e.g. the enzyme
+overhang of a ligation junction) does not enter an element's DR logo. With
+blast_annot --artefact_action exclude such calls are Contamination anyway.
 """
 
 import logging
@@ -63,7 +70,7 @@ logger = logging.getLogger(__name__)
 OUTPUT_COLUMNS = [
     "Read ID", "Subject ID", "Query Start CSV", "Query End CSV",
     "Start Subject", "End Subject", "Insertion Point", "Repeat Length",
-    "Overlap Sequence", "Read Strand", "Status",
+    "Overlap Sequence", "Read Strand", "Status", "Artefact",
 ]
 BLAST_FIELDS = ["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
                 "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qseq", "sseq"]
@@ -315,10 +322,29 @@ def read_is_lengths(is_fasta):
 
 
 NO_HIT_NOTES = {"Unannotated", "Contamination"}
+ARTEFACT_SUBJECT = "Artefact"
+
+
+def _artefact_value(row):
+    v = row.get("Artefact", "-")
+    if v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() in ("", "nan"):
+        return "-"
+    return str(v).strip()
+
+
+def _is_artefact_call(row):
+    from .artefacts import ARTEFACT_FLAGS
+    v = _artefact_value(row)
+    if v.startswith("excluded:"):
+        return True
+    return any(f in ARTEFACT_FLAGS or f == "one_sided_unsupported" for f in v.split(","))
 
 
 def _dr_subject(row):
-    """Subject ID written to the DR table: the Note for inserts without a hit."""
+    """Subject ID written to the DR table: the Note for inserts without a hit,
+    "Artefact" for calls with an artefact flag."""
+    if _is_artefact_call(row):
+        return ARTEFACT_SUBJECT
     note = str(row.get("Note", "")).strip()
     if note in NO_HIT_NOTES:
         return note
@@ -376,7 +402,7 @@ def find_drs_for_sample(best_alignment_path, reads_fasta, plasmid_seq,
             for idx, row in df.iterrows():
                 base = {"Read ID": None, "Subject ID": _dr_subject(row),
                         "Query Start CSV": None, "Query End CSV": None,
-                        "Overlap Sequence": "N/A"}
+                        "Overlap Sequence": "N/A", "Artefact": _artefact_value(row)}
                 parsed = parse_query_id(row["Query ID"])
                 if parsed is None:
                     rows.append(dict(base, **{"Read ID": row["Query ID"], "Status": "bad_query_id"}))

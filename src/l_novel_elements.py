@@ -146,6 +146,13 @@ Outputs (``out_dir``, default ``<data_dir>/novel_elements/``):
   novel_elements.log    log of the run
 All genome coordinates are 0-based half-open.
 
+Artefacts: calls whose Artefact column (best_alignment.tab, src/artefacts.py)
+holds an ARTEFACT flag (chimera, ligation at the cut site, fold-back, adapter,
+plasmid self-match, unsupported one-sided genome clip) are not used: a chimeric
+read joins unrelated DNA and would create a false cluster or corrupt a
+consensus. Their number is logged. Caution flags (one_sided,
+single_molecule_support, ...) do not exclude a call.
+
 Requires minimap2 and (for read clusters) mafft in PATH, and Biopython.
 """
 
@@ -417,14 +424,20 @@ def read_inserts(samples, notes=("Genome",)):
     Returns a list of dicts (sample, query_id, read_id, qstart, qend, ref_pos,
     note, seq).
     """
+    from .artefacts import ARTEFACT_FLAGS
     notes = set(notes)
     label = "/".join(sorted(notes))
     inserts = []
     for sample, annot, fasta in samples:
         wanted = []
+        n_artefact = 0
         with open(annot, newline="") as fh:
             for row in csv.DictReader(fh, delimiter="\t"):
                 if row.get("Note") not in notes:
+                    continue
+                flags = str(row.get("Artefact") or "-").split(",")
+                if any(f in ARTEFACT_FLAGS or f == "one_sided_unsupported" for f in flags):
+                    n_artefact += 1
                     continue
                 try:
                     read_id, qs, qe = parse_query_id(row["Query ID"])
@@ -432,6 +445,8 @@ def read_inserts(samples, notes=("Genome",)):
                     logger.warning("%s: cannot parse Query ID %r", sample, row["Query ID"])
                     continue
                 wanted.append((row["Query ID"], read_id, qs, qe, row.get("ref_pos", ""), row["Note"]))
+        if n_artefact:
+            logger.info("%s: %d %s insert(s) with artefact flags not used", sample, n_artefact, label)
         if not wanted:
             logger.info("%s: no %s inserts", sample, label)
             continue

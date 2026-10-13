@@ -27,6 +27,21 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   cluster each, boundaries exact for 53/59 and within 2 bp for all, TIR found
   for 58/59, genomic DR exact for 53/59; random genome intervals give 1.1 %
   `mobile_element_candidate`.
+- **Artefact detection** (`src/artefacts.py`, see `docs/ARTEFACTS.md`): per-call
+  evidence (`insertion_from_bam_artefacts.tsv`: flank presence, gap, strands,
+  MAPQ, distance to the cut site), automatic cut-site / enzyme inference from
+  read ends (`insertion_from_bam_cut_site.tsv`), and flags for non-adjacent
+  flanks, strand flips, non-plasmid flanks, junctions at the cut site,
+  overhang-sized DRs, one-sided calls, internal adapters, fold-backs,
+  plasmid-self inserts, single-molecule support and barcode bleed-through
+  (`sites_across_barcodes.tsv`). `best_alignment.tab` gains an `Artefact`
+  column; `--artefact_action exclude` relabels flagged calls *Contamination*.
+  Simulated chimeras / ligation chimeras / dimers / fold-backs: false calls
+  310 → 0 (uniform) and 323 → 0 (ONT r9.4.1); 0 of 2162 true insertions
+  flagged. New CLI options: `insert_finder(_batch) --plasmid --enzyme
+  --cut_site --overhang --adapter_fasta`, `blast_annot(_batch)
+  --artefact_action`, `--bleed_pct`. Simulator: `--chimera_rate`,
+  `--ligation_chimera_rate`, `--overhang`, `--dimer_rate`, `--foldback_rate`.
 - `scripts/build_element_db.py`: builds a non-redundant `--is_fasta` database
   from locally downloaded ISfinder, TnCentral/INTEGRALL and PICOTA files
   (repairs malformed records, merges identical/reverse-complement sequences,

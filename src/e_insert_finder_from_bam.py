@@ -45,6 +45,13 @@ contiguously across that flank/insert junction (a genomic read that only looks
 plasmid-flanked). insertion_from_bam.tab itself is unchanged; g_blast_annot
 uses the flags.
 
+Artefact evidence (docs/ARTEFACTS.md, src/artefacts.py): every call is also
+checked for chimera/ligation/fold-back/adapter/plasmid-multimer signatures
+(flank adjacency and strands, distance to the restriction cut site inferred
+from the read ends, ...). ``<output stem>_artefacts.tsv`` and
+``<output stem>_cut_site.tsv`` are written next to the output; g_blast_annot,
+is_stat, dr_finder and novel_elements use them.
+
 Recep Can Altınbağ, 22 10 2024, v0.2
 """
 
@@ -54,6 +61,7 @@ from collections import OrderedDict, namedtuple
 
 import pysam
 
+from . import artefacts
 from . import plasmid_genome_homology as homology
 
 logger = logging.getLogger(__name__)
@@ -273,13 +281,19 @@ def write_insertions(insertions, output_file):
 
 
 def main_insert_finder_from_bam(bamfile, output_file, insertion_threshold=500,
-                                homology_tsv=None, genome_bam=None):
+                                homology_tsv=None, genome_bam=None, plasmid_fasta=None,
+                                enzyme=None, cut_site=None, overhang=None, adapter_fasta=None,
+                                artefact_check=True):
     """Find insertions in ``bamfile`` and write them to ``output_file``.
 
     Also writes the plasmid-genome homology flags next to ``output_file`` when
     the homology table and the genome BAM are found (``homology_tsv`` /
     ``genome_bam``, default: looked up next to ``bamfile``, see module
-    docstring).
+    docstring), and the artefact evidence (src/artefacts.py; ``plasmid_fasta``
+    default: a FASTA next to the BAM or in its parent folder whose record
+    matches the BAM reference; ``enzyme`` or ``cut_site``/``overhang``
+    override the cut site inferred from the read ends; ``adapter_fasta``
+    replaces the built-in adapter motifs).
 
     Returns the list of Insertion records.
     """
@@ -287,4 +301,7 @@ def main_insert_finder_from_bam(bamfile, output_file, insertion_threshold=500,
     write_insertions(insertions, output_file)
     logger.info("Insertions written to %s", output_file)
     homology.flag_for_tab(output_file, insertions, bamfile, homology_tsv, genome_bam)
+    if artefact_check:
+        artefacts.flag_for_tab(output_file, insertions, bamfile, plasmid_fasta, enzyme, cut_site,
+                               overhang, adapter_fasta)
     return insertions
