@@ -86,13 +86,26 @@ def test_classify_genome_best_not_last_and_contamination():
     genome = [hsp("chr1", 1, 900, 1, 900, bits=1600), hsp("chr1", 1, 100, 5000, 5099, bits=180)]
     note, top, cov = classify([hsp("IS1", 1, 300, 1, 300)], genome, threshold=70)
     assert note == "Genome" and top["bitscore"] == 1600 and cov == 90.0   # B11
-    assert classify([], [], threshold=70) == ("Contamination", None, 0.0)
+    assert classify([], [], threshold=70) == ("Unannotated", None, 0.0)
+    assert classify([], [], threshold=70, flanked=False) == ("Contamination", None, 0.0)
+    assert classify([], genome, flanked=False)[0] == "Genome"        # a hit always wins
+
+
+def test_insert_flanked():
+    f = ga.insert_flanked
+    assert f("IN", 0, 900, 900)                  # CIGAR insertion: both flanks by construction
+    assert f("SC", 500, 1400, 3000)              # interior uncovered stretch
+    assert not f("SC", 0, 1286, 7523)            # read-start clip
+    assert not f("SC", 8080, 11688, 11688)       # read-end clip
+    assert not f("SC", 10, 1286, 7523)           # within READ_END_TOLERANCE of the read start
+    assert f("ins", 0, 900, 900)                 # unknown type: conservative, Unannotated
+    assert f("SC", 0, 900, None)                 # unknown read length
 
 
 def test_partial_is_filter():
     # 300 bp of a 10 kb IS: dropped when slen > partial_len and subject cov < partial_threshold
     h = hsp("Tn1", 1, 300, 1, 300, qlen=300, slen=10000)
-    assert classify([h], [], partial_threshold=80, partial_len=8000)[0] == "Contamination"
+    assert classify([h], [], partial_threshold=80, partial_len=8000)[0] == "Unannotated"
     assert classify([h], [], partial_threshold=80, partial_len=20000)[0] == "IS_DB"
 
 
@@ -175,8 +188,9 @@ def test_main_annot_classification(dataset):
     assert partial["Explained"] == round(span / 1300 * 100, 2)
     assert 1000 <= span <= 1020                                 # genome part (+ chance extension)
 
-    none = by_name(df, "none")
-    assert none["Note"] == "Contamination" and none["Subject ID"] == "no blast hit"
+    none = by_name(df, "none")                                  # flanked, no hit
+    assert none["Note"] == "Unannotated" and none["Subject ID"] == "no blast hit"
+    assert none["Explained"] == 0
 
     minus = by_name(df, "minus")
     assert minus["Note"] == "IS_DB" and minus["Subject ID"] == "IS5_IS5"
@@ -214,7 +228,7 @@ def test_evalue_parameter_is_applied(dataset):
 @needs_blast
 def test_keep_temp_and_dummy_is_fasta(dataset):
     df = run(dataset, is_fasta=None, keep_temp=True)
-    assert set(df["Note"]) <= {"Genome", "Contamination"}
+    assert set(df["Note"]) <= {"Genome", "Unannotated", "Contamination"}
     assert by_name(df, "full")["Note"] == "Genome"
     work = dataset["dir"] / "tmp work"
     assert (work / "blastdb").is_dir()
@@ -234,7 +248,7 @@ def test_db_rebuilt_after_fasta_change(dataset):
     assert ensure_blast_db(is_fa, db_dir) == db and os.path.getmtime(stamp) == t0   # cached
 
     df = run(dataset, is_fasta=is_fa, db_dir=db_dir)
-    assert by_name(df, "divergent")["Note"] == "Contamination"
+    assert by_name(df, "divergent")["Note"] == "Unannotated"
 
     write_fasta(is_fa, [("IS1_ISdiv", dataset["is_div"])])
     later = time.time() + 5
@@ -276,3 +290,55 @@ def test_batch_reuses_single_and_temp_handling(dataset, tmp_path):
     res = main_annot_batch(str(data), dataset["genome"], dataset["is_fa"],
                            temp_dir=str(data / "work"), threads=1)
     assert set(res) == {"bc 01", "bc02"}
+
+
+@needs_blast
+def test_contamination_rule_for_read_end_clips(tmp_path):
+    """SC inserts at a read end without hit are Contamination unless they match a
+    both-flanked Unannotated insert of the sample; IN and interior SC are Unannotated."""
+    rng = random.Random(7)
+    d = tmp_path / "rule dir"
+    d.mkdir()
+    novel = rand_seq(rng, 1200)            # unknown element, in neither database
+    junk = rand_seq(rng, 1000)             # unrelated foreign sequence
+    write_fasta(d / "is.fasta", [("IS1_ISx", rand_seq(rng, 1000))])
+    write_fasta(d / "genome.fasta", [("chr1", rand_seq(rng, 20000))])
+    p = lambda n: rand_seq(rng, n)         # plasmid-like flank (only its length matters here)
+    reads = {
+        "in_novel": p(500) + mutate(rng, novel, 0.05) + p(500),          # IN
+        "sc_inner": p(500) + mutate(rng, novel, 0.05) + p(500),          # interior SC
+        "sc_start_novel": mutate(rng, novel[300:], 0.05) + p(3000),      # read starts inside the element
+        "sc_end_novel": p(3000) + mutate(rng, revcomp(novel), 0.05),     # same element, read end, minus
+        "sc_end_junk": p(3000) + junk,                                   # chimera / foreign DNA
+        "sc_end_stub": p(3000) + mutate(rng, novel, 0.05) + p(900),      # element + unaligned plasmid stub
+    }
+    write_fasta(d / "reads.fasta", list(reads.items()))
+    rows = [("in_novel", 500, 1700, "IN"), ("sc_inner", 500, 1700, "SC"),
+            ("sc_start_novel", 0, 900, "SC"), ("sc_end_novel", 3000, 4200, "SC"),
+            ("sc_end_junk", 3000, 4000, "SC"), ("sc_end_stub", 3000, 5100, "SC")]
+    (d / "ins.tab").write_text("".join(f"{r}\t{a}\t{b}\t{b - a}\t100\t20\t{t}\tFalse\n" for r, a, b, t in rows))
+    out = d / "best.tab"
+    notes = main_annot(str(d / "ins.tab"), str(d / "reads.fasta"), str(d / "genome.fasta"),
+                       is_fasta=str(d / "is.fasta"), temp_dir=str(d / "tmp"), output_csv=str(out), threads=1)
+    got = {q.rsplit("_", 2)[0]: n for q, n in notes.items()}
+    assert got == {"in_novel": "Unannotated", "sc_inner": "Unannotated", "sc_start_novel": "Unannotated",
+                   "sc_end_novel": "Unannotated", "sc_end_junk": "Contamination",
+                   "sc_end_stub": "Unannotated"}       # anchor covered >= threshold by the clip
+    df = pd.read_csv(out, sep="\t")
+    assert list(df.columns) == OUTPUT_COLUMNS and len(df) == 6
+    assert set(df["Subject ID"]) == {"no blast hit"}
+    assert not (d / "tmp").exists()
+
+    # without a flanked anchor, the novel read-end clips are Contamination
+    (d / "ins.tab").write_text("".join(f"{r}\t{a}\t{b}\t{b - a}\t100\t20\t{t}\tFalse\n"
+                                       for r, a, b, t in rows[2:5]))
+    notes = main_annot(str(d / "ins.tab"), str(d / "reads.fasta"), str(d / "genome.fasta"),
+                       is_fasta=str(d / "is.fasta"), temp_dir=str(d / "tmp"), output_csv=str(out), threads=1)
+    assert set(notes.values()) == {"Contamination"}
+
+
+def test_subject_coverage():
+    h = [hsp("a", 1, 100, 1, 100, slen=400), hsp("a", 101, 200, 300, 201, slen=400),
+         hsp("b", 1, 50, 1, 50, slen=50)]
+    assert ga.subject_coverage(h[:2]) == 50.0
+    assert ga.subject_coverage(h) == 100.0

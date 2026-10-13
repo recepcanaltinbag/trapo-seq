@@ -37,7 +37,7 @@ Priority order: results that are scientifically wrong first, then crashes.
 | ✅ | Stats/plots: counting per insertion, crashes, multi-contig | B36–B48 |
 | ✅ | CLI: `--is_fasta` fallback, `--keep_temp`, `--gap`, output names | B15, B16, B20, B33, B47 |
 | ✅ | Circular plasmid in mapping (inserts near the origin carry plasmid sequence) | B09 |
-| ⬜ | Inserts with plasmid flanks but no IS/genome hit are labelled *Contamination*; relabel as `Unannotated` and reserve *Contamination* for reads without plasmid flanks (seen on bundled test data: 34/41 inserts with a shared 4 bp DR) | — |
+| ✅ | Inserts with plasmid flanks but no IS/genome hit are labelled *Contamination*; relabel as `Unannotated` and reserve *Contamination* for reads without plasmid flanks (seen on bundled test data: 34/41 inserts with a shared 4 bp DR) | — |
 | ⬜ | Plasmid–genome homologous regions cause false insertions: detect shared segments (plasmid vs genome BLAST), mask or flag them; add homologous segments to the simulator to test | #5 |
 
 Acceptance: the original `test-data` and a simulated dataset run end to end

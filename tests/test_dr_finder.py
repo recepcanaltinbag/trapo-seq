@@ -279,6 +279,15 @@ def test_is_bounds_extend_to_is_ends():
     row.update({"Subject Start": 3, "Subject End": 1195})       # plus hit missing IS bases 1-2
     assert _is_bounds(row, 100) == (99, 1293)
     assert _is_bounds(dict(row, Note="Genome"), 100) == (None, None)
+    assert _is_bounds(dict(row, Note="Unannotated"), 100) == (None, None)   # handled like Genome
+
+
+def test_dr_subject_for_inserts_without_hit():
+    from src.j_dr_finder import _dr_subject
+    assert _dr_subject({"Note": "IS_DB", "Subject ID": "IS5_IS5"}) == "IS5_IS5"
+    assert _dr_subject({"Note": "Genome", "Subject ID": "chr"}) == "chr"
+    assert _dr_subject({"Note": "Unannotated", "Subject ID": "no blast hit"}) == "Unannotated"
+    assert _dr_subject({"Note": "Contamination", "Subject ID": "no blast hit"}) == "Contamination"
 
 
 def test_flank_extends_to_is_boundary_at_most_max_extend():

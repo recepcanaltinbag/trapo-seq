@@ -1,5 +1,12 @@
 """Characterise novel (non-database) inserts as candidate mobile elements.
 
+Two kinds of insert are characterised (column ``source``):
+
+* ``genome`` - inserts labelled ``Genome`` (steps 1-8 below);
+* ``reads``  - inserts labelled ``Unannotated``: flanked by plasmid but found
+  neither in the curated IS database nor in the genome (section UNANNOTATED
+  INSERTS).
+
 Inserts that best_alignment.tab labels ``Genome`` match the host genome but
 not the curated IS database. If the same genomic interval jumped into the trap
 plasmid in several reads (or samples), it may be an uncatalogued mobile
@@ -99,17 +106,52 @@ VERDICT RULE
   the verdicts were 96.9 % genome_segment, 2.0 % partial_evidence and 1.1 %
   mobile_element_candidate.
 
+UNANNOTATED INSERTS (source = reads)
+------------------------------------
+No genome copy exists, so the element is reconstructed from the reads.
+R1. Clustering: all-vs-all ``minimap2 -x ava-ont`` of the insert sequences;
+    inserts aligned over >= ``min_overlap`` of both are linked and clusters
+    are the connected components (see cluster_by_similarity: a chimeric
+    insert cannot join two elements); a smaller component with a member
+    covered >= 90 % by a member of a larger one is absorbed as partial.
+    Clusters with < ``min_reads`` members are dropped.
+R2. Consensus: the medoid (member with most matching bases to the other
+    members) and up to ``max_consensus_reads`` - 1 members closest to it,
+    oriented on the medoid, are aligned with MAFFT (--auto); a column-wise
+    majority vote (terminal gaps of a read = no vote; a column needs votes
+    from >= half of the reads; gap columns dropped) gives the consensus.
+    racon/medaka are not used (no extra dependency). ``read_identity`` =
+    median identity of the members to the consensus (minimap2 -c).
+R3. TIR (find_tir) within ``consensus_flank`` (20) bp of the consensus
+    ends; when found its outer edges trim the consensus to the element
+    (boundary_source ``consensus+TIR``, else ``consensus``). The consensus
+    may keep one copy of the plasmid TSD at an end when no TIR is found.
+    Longest ORF as in step 7. Coordinates (start/end/orf_*) are on the
+    consensus; contig, est_*, *_spread and the genomic DR columns are NA.
+R4. Verdict as in VERDICT RULE, but DR evidence is the plasmid target-site
+    duplication: the modal DR-finder repeat length of the cluster's inserts
+    (plasmid_dr_len) >= ``min_dr_len`` in >= 50 % of its inserts with a
+    DR-finder result; ``no_element_evidence`` replaces ``genome_segment``.
+Plasmid DR columns (plasmid_dr_len, plasmid_dr_seq, plasmid_dr_support,
+plasmid_dr_counts 'len:n;...') are filled for both sources from
+``<data_dir>/insertions/<sample>_insertions.csv`` (run dr_finder first; NA
+otherwise); for genome clusters they are informational only.
+
 Outputs (``out_dir``, default ``<data_dir>/novel_elements/``):
-  novel_elements.tsv    one row per cluster (columns: TSV_COLUMNS)
-  novel_elements.fasta  element sequences from the genome (refined boundaries)
+  novel_elements.tsv    one row per cluster (columns: TSV_COLUMNS); genome
+                        clusters ``novel_NNN`` first, then read clusters
+                        ``unannotated_NNN``
+  novel_elements.fasta  element sequences: from the genome (refined
+                        boundaries) or the read consensus (TIR-trimmed)
   novel_elements.log    log of the run
 All genome coordinates are 0-based half-open.
 
-Requires minimap2 in PATH and Biopython.
+Requires minimap2 and (for read clusters) mafft in PATH, and Biopython.
 """
 
 import csv
 import logging
+import math
 import os
 import shutil
 import statistics
@@ -129,16 +171,19 @@ ANNOT_NAME = "best_alignment.tab"
 INSERT_TAB_NAME = "insertion_from_bam.tab"
 
 TSV_COLUMNS = [
-    "cluster_id", "contig", "start", "end", "length", "boundary_source",
+    "cluster_id", "source", "contig", "start", "end", "length", "boundary_source",
     "n_reads", "n_partial_reads", "n_samples", "samples", "insert_strands",
     "est_start", "est_end", "start_spread", "end_spread",
+    "consensus_reads", "consensus_length", "read_identity",
     "tir_found", "tir_left_len", "tir_right_len", "tir_identity", "tir_score",
     "tir_left_offset", "tir_right_offset", "tir_left_seq", "tir_right_seq",
     "dr_len", "dr_mismatches", "dr_left_seq", "dr_right_seq",
+    "plasmid_dr_len", "plasmid_dr_seq", "plasmid_dr_support", "plasmid_dr_counts",
     "longest_orf_aa", "orf_start", "orf_end", "orf_strand",
     "genome_copies", "similar_clusters", "known_hit",
     "n_plasmid_sites", "plasmid_sites", "verdict",
 ]
+NA = "NA"   # not applicable (e.g. genome coordinates / genomic DR of a read consensus)
 
 # Element-characterisation defaults (see the module docstring for the reasons).
 CHARACTERISE_DEFAULTS = dict(flank_search=60, max_tir=50, min_tir_len=10, min_tir_identity=0.75,
@@ -361,43 +406,95 @@ def discover_samples(data_dir):
 
 
 def read_genome_inserts(samples):
-    """Collect the sequences of inserts labelled Genome.
+    """Collect the sequences of inserts labelled Genome (see read_inserts)."""
+    return read_inserts(samples, ("Genome",))
+
+
+def read_inserts(samples, notes=("Genome",)):
+    """Collect the sequences of inserts whose Note is in ``notes``.
 
     ``samples``: [(sample, annotation tab, reads fasta)].
-    Returns a list of dicts (sample, query_id, read_id, qstart, qend, ref_pos, seq).
+    Returns a list of dicts (sample, query_id, read_id, qstart, qend, ref_pos,
+    note, seq).
     """
+    notes = set(notes)
+    label = "/".join(sorted(notes))
     inserts = []
     for sample, annot, fasta in samples:
         wanted = []
         with open(annot, newline="") as fh:
             for row in csv.DictReader(fh, delimiter="\t"):
-                if row.get("Note") != "Genome":
+                if row.get("Note") not in notes:
                     continue
                 try:
                     read_id, qs, qe = parse_query_id(row["Query ID"])
                 except ValueError:
                     logger.warning("%s: cannot parse Query ID %r", sample, row["Query ID"])
                     continue
-                wanted.append((row["Query ID"], read_id, qs, qe, row.get("ref_pos", "")))
+                wanted.append((row["Query ID"], read_id, qs, qe, row.get("ref_pos", ""), row["Note"]))
         if not wanted:
-            logger.info("%s: no Genome inserts", sample)
+            logger.info("%s: no %s inserts", sample, label)
             continue
         reads = SeqIO.index(fasta, "fasta")
         try:
             n = 0
-            for qid, read_id, qs, qe, ref_pos in wanted:
+            for qid, read_id, qs, qe, ref_pos, note in wanted:
                 if read_id not in reads:
                     logger.warning("%s: read %s not in %s", sample, read_id, fasta)
                     continue
                 seq = str(reads[read_id].seq[qs:qe]).upper()
                 if seq:
                     inserts.append({"sample": sample, "query_id": qid, "read_id": read_id,
-                                    "qstart": qs, "qend": qe, "ref_pos": ref_pos, "seq": seq})
+                                    "qstart": qs, "qend": qe, "ref_pos": ref_pos, "note": note,
+                                    "seq": seq})
                     n += 1
         finally:
             reads.close()
-        logger.info("%s: %d Genome inserts", sample, n)
+        logger.info("%s: %d %s inserts", sample, n, label)
     return inserts
+
+
+def read_plasmid_drs(dr_dir, sample_names):
+    """Plasmid target-site duplications from the DR finder
+    (``<dr_dir>/<sample>_insertions.csv``):
+    {(sample, read_id, qstart, qend): (repeat length, DR sequence)}.
+    Rows without a repeat length are skipped; missing files are ignored."""
+    drs = {}
+    if not dr_dir or not os.path.isdir(dr_dir):
+        return drs
+    for sample in sample_names:
+        path = os.path.join(dr_dir, f"{sample}_insertions.csv")
+        if not os.path.isfile(path):
+            continue
+        with open(path, newline="") as fh:
+            for row in csv.DictReader(fh):
+                try:
+                    key = (sample, row["Read ID"], int(float(row["Query Start CSV"])),
+                           int(float(row["Query End CSV"])))
+                    length = int(float(row["Repeat Length"]))
+                except (KeyError, TypeError, ValueError):
+                    continue
+                seq = (row.get("Overlap Sequence") or "").strip()
+                drs[key] = (length, "" if seq in ("", "N/A", "nan") else seq.upper())
+    return drs
+
+
+def plasmid_dr_summary(payloads, drs):
+    """Modal plasmid DR of a cluster's inserts: dict(plasmid_dr_len,
+    plasmid_dr_seq, plasmid_dr_support, plasmid_dr_counts). plasmid_dr_support
+    = fraction of inserts with a DR-finder repeat length that have the modal
+    length. All values are NA without DR-finder output."""
+    vals = [drs.get((p["sample"], p["read_id"], p["qstart"], p["qend"])) for p in payloads]
+    vals = [v for v in vals if v is not None]
+    if not vals:
+        return {"plasmid_dr_len": NA, "plasmid_dr_seq": NA, "plasmid_dr_support": NA,
+                "plasmid_dr_counts": NA}
+    counts = Counter(v[0] for v in vals)
+    mode, n = max(counts.items(), key=lambda x: (x[1], x[0]))
+    seqs = Counter(v[1] for v in vals if v[0] == mode and v[1])
+    return {"plasmid_dr_len": mode, "plasmid_dr_seq": seqs.most_common(1)[0][0] if seqs else "",
+            "plasmid_dr_support": round(n / len(vals), 3),
+            "plasmid_dr_counts": ";".join(f"{k}:{c}" for k, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])))}
 
 
 #-------------------------------------------------------------- mapping -----
@@ -684,12 +781,434 @@ def known_element_hits(fasta, is_fasta, work_dir, threads=2):
                f"{100 * (r['qend'] - r['qstart']) / r['qlen']:.1f}" for q, r in best.items()}
 
 
+#----------------------------------------------- Unannotated: read-based -----
+
+def all_vs_all(seqs, work_dir, threads=2, name="ava"):
+    """minimap2 -x ava-ont over ``seqs`` (list of str). Returns
+    {(i, j): dict(strand, cov={i: .., j: ..}, matches, alen)} with i < j, the
+    best record (most matching bases) per pair; cov = aligned fraction of each
+    sequence."""
+    fa = os.path.join(work_dir, f"{name}.fasta")
+    paf = os.path.join(work_dir, f"{name}.paf")
+    with open(fa, "w") as fh:
+        for i, seq in enumerate(seqs):
+            fh.write(f">{i}\n{seq}\n")
+    _run(["minimap2", "-x", "ava-ont", "-t", str(max(1, int(threads))), "-o", paf, fa, fa])
+    pairs = {}
+    for rec in parse_paf(paf):
+        a, b = int(rec["qname"]), int(rec["tname"])
+        if a == b:
+            continue
+        key = (min(a, b), max(a, b))
+        if key in pairs and pairs[key]["matches"] >= rec["matches"]:
+            continue
+        pairs[key] = {"strand": rec["strand"], "matches": rec["matches"], "alen": rec["alen"],
+                      "cov": {a: (rec["qend"] - rec["qstart"]) / rec["qlen"],
+                              b: (rec["tend"] - rec["tstart"]) / rec["tlen"]}}
+    return pairs
+
+
+def _pair(pairs, i, j):
+    return pairs.get((min(i, j), max(i, j)))
+
+
+def cluster_by_similarity(lengths, pairs, min_overlap=0.5, contain=0.9):
+    """Cluster sequences without a reference (cf. cluster_intervals).
+
+    Sequences are linked when their alignment covers >= ``min_overlap`` of
+    BOTH (reciprocal coverage); clusters are the connected components. Single
+    linkage tolerates the pairs that ava-ont misses or under-reports at
+    nanopore error rates (a seed-only greedy scheme split one element into up
+    to 11 clusters on simulated r9.4.1 reads). It cannot chain two elements
+    through a chimeric insert A+B: its coverage by A is a/(a+b) and by B
+    b/(a+b), both >= 0.5 only when a == b (it joins the element of its
+    longer part). A component with fewer members than another component is
+    absorbed into it as partial when one of its members is covered >=
+    ``contain`` by a typical member of the larger one (length <= 1.1 x the
+    median member length, so a chimera containing an element cannot absorb
+    that element's cluster) - fragmented inserts. Returns [dict(seed=longest
+    member, members=[...], partial=[...])], largest first.
+    """
+    n = len(lengths)
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for (i, j), p in pairs.items():
+        if min(p["cov"][i], p["cov"][j]) >= min_overlap:
+            parent[find(i)] = find(j)
+    comps = {}
+    for i in range(n):
+        comps.setdefault(find(i), []).append(i)
+    clusters = [{"seed": max(m, key=lambda k: (lengths[k], -k)), "members": sorted(m), "partial": []}
+                for m in comps.values()]
+    clusters.sort(key=lambda c: (-len(c["members"]), -lengths[c["seed"]], c["seed"]))
+    where = {}
+    typical_max = []
+    for ci, c in enumerate(clusters):
+        for i in c["members"]:
+            where[i] = ci
+        typical_max.append(1.1 * statistics.median(lengths[i] for i in c["members"]))
+    host_of = {}
+    for (i, j), p in pairs.items():
+        for small, big in ((i, j), (j, i)):
+            cs, cb = where[small], where[big]
+            if cs == cb or len(clusters[cb]["members"]) <= len(clusters[cs]["members"]):
+                continue
+            if lengths[big] > typical_max[cb]:
+                continue
+            if p["cov"][small] >= contain:
+                cur = host_of.get(cs)
+                if cur is None or cb < cur:      # prefer the largest host
+                    host_of[cs] = cb
+    kept = []
+    for ci, c in enumerate(clusters):
+        h = ci
+        while h in host_of:                       # follow absorption chains to the final host
+            h = host_of[h]
+        if h == ci:
+            kept.append(c)
+        else:
+            clusters[h]["partial"].extend(c["members"] + c["partial"])
+    return kept
+
+
+def medoid(members, pairs):
+    """Member with the most matching bases to the other members (ties: lowest index)."""
+    members = set(members)
+    score = Counter()
+    for (i, j), p in pairs.items():
+        if i in members and j in members:
+            score[i] += p["matches"]
+            score[j] += p["matches"]
+    return max(sorted(members), key=lambda i: score[i])
+
+
+def majority_consensus(aligned, min_cov_fraction=0.5, base_fraction=0.5):
+    """Column-wise vote over an MSA (list of equal-length strings).
+
+    Leading/trailing gaps of a sequence are 'no data', not votes for a gap, so
+    fragmented members do not shorten the consensus. A column needs votes from
+    >= ``min_cov_fraction`` of the sequences (at least 2 when there are >= 2).
+    The column is kept when >= ``base_fraction`` of its votes are bases (0.5:
+    plain majority, a base beating a gap on ties); its base is the most
+    frequent one. Returns the consensus string.
+    """
+    if not aligned:
+        return ""
+    if len(aligned) == 1:
+        return aligned[0].replace("-", "").upper()
+    spans = []
+    for a in aligned:
+        lo = len(a) - len(a.lstrip("-"))
+        spans.append((lo, len(a.rstrip("-"))))
+    need = max(2, math.ceil(min_cov_fraction * len(aligned)))
+    out = []
+    for col in range(len(aligned[0])):
+        votes = Counter(a[col].upper() for a, (lo, hi) in zip(aligned, spans) if lo <= col < hi)
+        if sum(votes.values()) < need:
+            continue
+        total = sum(votes.values())
+        votes.pop("-", 0)
+        votes.pop("N", None)
+        if not votes:
+            continue
+        base, _n = max(votes.items(), key=lambda x: (x[1], x[0]))
+        if sum(votes.values()) >= base_fraction * total:
+            out.append(base)
+    return "".join(out)
+
+
+def _parse_cs(cs):
+    """minimap2 short cs string -> list of (op, value): (':', n), ('*', 'ac'),
+    ('+', 'seq'), ('-', 'seq')."""
+    ops, i, n = [], 0, len(cs)
+    while i < n:
+        op = cs[i]
+        j = i + 1
+        if op == ":":
+            while j < n and cs[j].isdigit():
+                j += 1
+            ops.append((":", int(cs[i + 1:j])))
+        elif op == "*":
+            j = i + 3
+            ops.append(("*", cs[i + 1:j]))
+        else:
+            while j < n and cs[j].isalpha():
+                j += 1
+            ops.append((op, cs[i + 1:j]))
+        i = j
+    return ops
+
+
+def pileup_polish(draft, seqs, work_dir, threads=2, base_fraction=0.5, name="polish"):
+    """One round of polishing: ``seqs`` are mapped to ``draft`` (minimap2 -c
+    --cs, map-ont, best alignment per read) and every draft position is
+    re-voted: the base is kept when >= ``base_fraction`` of the reads
+    covering it show a base there (most frequent base wins), an insertion
+    before it is added when > 1 - ``base_fraction`` of the reads spanning it
+    carry one (most frequent inserted string). Indels are left-aligned in
+    repeats so equivalent placements vote together. Positions no read covers
+    stay as in the draft. Indels are counted against one sequence, so the
+    misplaced indels an MSA can leave in a column-wise consensus are
+    corrected. Returns the polished sequence."""
+    if not seqs or not draft:
+        return draft
+    dfa = os.path.join(work_dir, f"{name}_draft.fasta")
+    qfa = os.path.join(work_dir, f"{name}_reads.fasta")
+    paf = os.path.join(work_dir, f"{name}.paf")
+    with open(dfa, "w") as fh:
+        fh.write(f">draft\n{draft}\n")
+    with open(qfa, "w") as fh:
+        for i, seq in enumerate(seqs):
+            fh.write(f">r{i}\n{seq}\n")
+    _run(["minimap2", "-c", "--cs", "-x", "map-ont", "--secondary=no", "-t", str(max(1, int(threads))),
+          "-o", paf, dfa, qfa])
+    best = {}
+    with open(paf) as fh:
+        for line in fh:
+            f = line.rstrip("\n").split("\t")
+            if len(f) < 12 or "tp:A:P" not in f[12:]:
+                continue
+            cs = next((t[5:] for t in f[12:] if t.startswith("cs:Z:")), None)
+            if cs is None:
+                continue
+            if f[0] not in best or int(f[9]) > best[f[0]][0]:
+                best[f[0]] = (int(f[9]), int(f[7]), int(f[8]), cs)
+    n = len(draft)
+    base_votes = [Counter() for _ in range(n)]
+    ins_votes = [Counter() for _ in range(n + 1)]
+    cover = [0] * (n + 1)          # reads spanning the gap before position p (p-1 and p aligned)
+    for _m, ts, te, cs in best.values():
+        t = ts
+        for op, val in _parse_cs(cs):
+            if op == ":":
+                for k in range(val):
+                    base_votes[t + k][draft[t + k]] += 1
+                t += val
+            elif op == "*":
+                base_votes[t][val[1].upper()] += 1
+                t += 1
+            elif op == "-":
+                # left-align: equivalent placements of a deletion in a repeat get one vote position
+                d0, ln = t, len(val)
+                while d0 > ts and draft[d0 - 1] == draft[d0 + ln - 1]:
+                    d0 -= 1
+                for k in range(ln):
+                    base_votes[d0 + k]["-"] += 1
+                t += ln
+            elif op == "+":
+                i0, seq = t, val.upper()
+                while i0 > ts + 1 and draft[i0 - 1] == seq[-1]:      # left-align the insertion
+                    seq = seq[-1] + seq[:-1]
+                    i0 -= 1
+                ins_votes[i0][seq] += 1
+        for p in range(ts + 1, te):
+            cover[p] += 1
+    out = []
+    for p in range(n):
+        iv = ins_votes[p]
+        if cover[p] and sum(iv.values()) > (1 - base_fraction) * cover[p]:
+            out.append(iv.most_common(1)[0][0])
+        bv = base_votes[p]
+        total = sum(bv.values())
+        if not total:
+            out.append(draft[p])
+            continue
+        gaps = bv.pop("-", 0)
+        if bv and total - gaps >= base_fraction * total:
+            out.append(max(bv.items(), key=lambda x: (x[1], x[0]))[0])
+    return "".join(out)
+
+
+def build_consensus(seqs, work_dir, threads=2, name="cons", base_fraction=0.4, polish_rounds=2):
+    """Consensus of oriented sequences (first = medoid): MAFFT MSA ->
+    majority_consensus (draft) -> ``polish_rounds`` rounds of pileup_polish.
+    Without MAFFT in PATH the medoid is the draft (warning)."""
+    if len(seqs) == 1:
+        return seqs[0]
+    if shutil.which("mafft") is None:
+        logger.warning("mafft not in PATH: the medoid insert is the draft consensus")
+        draft = seqs[0]
+    else:
+        draft = _msa_consensus(seqs, work_dir, threads, name, base_fraction)
+    for r in range(polish_rounds):
+        polished = pileup_polish(draft, seqs, work_dir, threads, base_fraction, f"{name}_p{r}")
+        if polished == draft:
+            break
+        draft = polished
+    return draft
+
+
+def _msa_consensus(seqs, work_dir, threads, name, base_fraction):
+    fa = os.path.join(work_dir, f"{name}.fasta")
+    with open(fa, "w") as fh:
+        for i, seq in enumerate(seqs):
+            fh.write(f">m{i}\n{seq}\n")
+    res = _run(["mafft", "--auto", "--nuc", "--quiet", "--thread", str(max(1, int(threads))), fa])
+    aligned = {}
+    name_ = None
+    for line in res.stdout.splitlines():
+        if line.startswith(">"):
+            name_ = line[1:].split()[0]
+            aligned[name_] = []
+        elif name_ is not None:
+            aligned[name_].append(line.strip())
+    msa = ["".join(aligned[f"m{i}"]) for i in range(len(seqs)) if f"m{i}" in aligned]
+    return majority_consensus(msa, base_fraction=base_fraction) or seqs[0]
+
+
+def map_identity(queries, ref_fasta, work_dir, threads=2):
+    """Identity (matches / alignment columns, minimap2 -c map-ont) of each
+    query (name, seq, target name) to its own target in ``ref_fasta``:
+    {name: identity}; queries without an alignment to their target are absent."""
+    fa = os.path.join(work_dir, "members.fasta")
+    paf = os.path.join(work_dir, "members.paf")
+    with open(fa, "w") as fh:
+        for qname, seq, _t in queries:
+            fh.write(f">{qname}\n{seq}\n")
+    _run(["minimap2", "-c", "-x", "map-ont", "-N", "50", "-t", str(max(1, int(threads))),
+          "-o", paf, os.path.abspath(ref_fasta), fa])
+    target = {q: t for q, _s, t in queries}
+    best = {}
+    for rec in parse_paf(paf):
+        if target.get(rec["qname"]) != rec["tname"]:
+            continue
+        if rec["qname"] not in best or rec["matches"] > best[rec["qname"]]["matches"]:
+            best[rec["qname"]] = rec
+    return {q: r["matches"] / r["alen"] for q, r in best.items() if r["alen"]}
+
+
+def characterise_consensus(cons, flank=20, max_tir=50, min_tir_len=10, min_tir_identity=0.75,
+                           min_tir_score=22, edge_run=2, trim_mismatch=-2, min_dr_len=3,
+                           min_orf_aa=200, plasmid_dr=None, min_dr_support=0.5, **_ignored):
+    """TIR, boundaries, ORF and verdict for a read consensus (no genome copy).
+
+    The consensus spans the insert as cut out of the reads, i.e. the element
+    +- a few bp. TIRs are searched within ``flank`` bp of both ends; when one
+    is found its outer edges become the element ends (boundary_source
+    ``consensus+TIR``), otherwise the whole consensus is the element
+    (``consensus``). There is no genomic DR (NA). The verdict uses the plasmid
+    target-site duplication instead (``plasmid_dr``: plasmid_dr_summary of
+    the cluster): DR evidence = modal plasmid DR >= min_dr_len in >=
+    ``min_dr_support`` of the inserts with a DR-finder result.
+    Returns (row dict, element sequence).
+    """
+    tir_kw = dict(max_tir=max_tir, min_len=min_tir_len, min_identity=min_tir_identity,
+                  min_score=min_tir_score, edge_run=edge_run, trim_mismatch=trim_mismatch)
+    n = len(cons)
+    tir = find_tir(cons, 0, n, flank=flank, **tir_kw)
+    if tir:
+        start, end, source = tir["start"], tir["end"], "consensus+TIR"
+    else:
+        start, end, source = 0, n, "consensus"
+    element = cons[start:end]
+    orf = longest_orf(element)
+    orf_aa = orf["aa"] if orf else 0
+    pdr = plasmid_dr or {}
+    has_dr = (isinstance(pdr.get("plasmid_dr_len"), int) and pdr["plasmid_dr_len"] >= min_dr_len
+              and (pdr.get("plasmid_dr_support") or 0) >= min_dr_support)
+    has_orf = orf_aa >= min_orf_aa
+    if tir and (has_dr or has_orf):
+        verdict = "mobile_element_candidate"
+    elif tir or (has_dr and has_orf):
+        verdict = "partial_evidence"
+    else:
+        verdict = "no_element_evidence"
+    if tir:
+        tir_cols = {"tir_left_len": tir["left_len"], "tir_right_len": tir["right_len"],
+                    "tir_left_offset": 0, "tir_right_offset": 0,
+                    "tir_identity": tir["identity"], "tir_score": tir["score"],
+                    "tir_left_seq": tir["left_seq"], "tir_right_seq": tir["right_seq"]}
+    else:
+        tir_cols = {"tir_left_len": 0, "tir_right_len": 0, "tir_left_offset": "",
+                    "tir_right_offset": "", "tir_identity": "", "tir_score": "",
+                    "tir_left_seq": "", "tir_right_seq": ""}
+    row = {
+        "start": start, "end": end, "length": end - start, "boundary_source": source,
+        "tir_found": bool(tir), **tir_cols,
+        "dr_len": NA, "dr_mismatches": NA, "dr_left_seq": NA, "dr_right_seq": NA,
+        "longest_orf_aa": orf_aa,
+        "orf_start": orf["start"] if orf else "",
+        "orf_end": orf["end"] if orf else "",
+        "orf_strand": orf["strand"] if orf else "",
+        "verdict": verdict,
+    }
+    return row, element
+
+
+def read_clusters(inserts, work_dir, threads=2, min_reads=2, min_overlap=0.5, site_tolerance=20,
+                  max_consensus_reads=30, drs=None, consensus_flank=20, cparams=None,
+                  base_fraction=0.4, polish_rounds=2):
+    """Cluster inserts without genome hit by all-vs-all similarity and
+    characterise a consensus per cluster. Returns (rows, fasta records)."""
+    cparams = cparams or {}
+    pairs = all_vs_all([x["seq"] for x in inserts], work_dir, threads, "ava")
+    lengths = [len(x["seq"]) for x in inserts]
+    clusters = [c for c in cluster_by_similarity(lengths, pairs, min_overlap)
+                if len(c["members"]) >= min_reads]
+    rows, records, idq = [], [], []
+    for k, c in enumerate(clusters, 1):
+        cid = f"unannotated_{k:03d}"
+        med = medoid(c["members"], pairs)
+        # orient members on the medoid; members without a direct alignment are not used
+        oriented = [(med, "+")]
+        others = []
+        for i in c["members"]:
+            if i == med:
+                continue
+            p = _pair(pairs, i, med)
+            if p is not None:
+                others.append((-p["matches"], i, p["strand"]))
+        oriented += [(i, s) for _m, i, s in sorted(others)][:max(0, max_consensus_reads - 1)]
+        seqs = [inserts[i]["seq"] if s == "+" else revcomp(inserts[i]["seq"]) for i, s in oriented]
+        cons = build_consensus(seqs, work_dir, threads, f"cons_{k}", base_fraction, polish_rounds)
+        payloads = [inserts[i] for i in c["members"] + c["partial"]]
+        strands = Counter()
+        for i in c["members"] + c["partial"]:
+            p = _pair(pairs, i, med)
+            strands["+" if i == med else (p["strand"] if p else "?")] += 1
+        pdr = plasmid_dr_summary(payloads, drs or {})
+        char, element = characterise_consensus(cons, flank=consensus_flank, plasmid_dr=pdr, **cparams)
+        sample_counts = Counter(p["sample"] for p in payloads)
+        sites, n_sites = _site_summary([p["ref_pos"] for p in payloads], site_tolerance)
+        row = {"cluster_id": cid, "source": "reads", "contig": NA,
+               "n_reads": len(c["members"]), "n_partial_reads": len(c["partial"]),
+               "n_samples": len(sample_counts),
+               "samples": ";".join(f"{s}:{n}" for s, n in sorted(sample_counts.items())),
+               "insert_strands": ";".join(f"{s}:{n}" for s, n in sorted(strands.items())),
+               "est_start": NA, "est_end": NA, "start_spread": NA, "end_spread": NA,
+               "consensus_reads": len(oriented), "consensus_length": len(cons),
+               "n_plasmid_sites": n_sites, "plasmid_sites": sites, "genome_copies": "",
+               "similar_clusters": "", "known_hit": "", **pdr, **char}
+        rows.append(row)
+        records.append((cid, f"consensus len={char['length']} reads={len(c['members'])} "
+                             f"verdict={char['verdict']}", element))
+        idq += [(f"{cid}|{i}", inserts[i]["seq"], cid) for i in c["members"]]
+    if records:
+        fa = os.path.join(work_dir, "consensus.fasta")
+        with open(fa, "w") as fh:
+            for cid, _d, seq in records:
+                fh.write(f">{cid}\n{seq}\n")
+        ident = map_identity(idq, fa, work_dir, threads)
+        for row in rows:
+            vals = [v for q, v in ident.items() if q.split("|")[0] == row["cluster_id"]]
+            row["read_identity"] = round(statistics.median(vals), 4) if vals else NA
+    return rows, records
+
+
 #----------------------------------------------------------------- main -----
 
 def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_reads=2, threads=2,
                         flank_search=60, samples=None, min_overlap=0.5, end_window=10,
-                        site_tolerance=20, is_fasta=None, keep_temp=False, **characterise_params):
-    """Cluster and characterise the Genome-labelled inserts of all samples.
+                        site_tolerance=20, is_fasta=None, keep_temp=False, unannotated=True,
+                        max_consensus_reads=30, consensus_flank=20, dr_dir=None,
+                        consensus_base_fraction=0.4, polish_rounds=2, **characterise_params):
+    """Cluster and characterise the Genome- and Unannotated-labelled inserts.
 
     Inputs: ``data_dir`` with one folder per sample (best_alignment.tab and
     <sample>.fasta), or an explicit ``samples`` list of
@@ -697,7 +1216,9 @@ def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_read
     genome used for annotation.
 
     Writes novel_elements.tsv / .fasta / .log in out_dir (default
-    <data_dir>/novel_elements) and returns the list of row dicts.
+    <data_dir>/novel_elements) and returns the list of row dicts: first the
+    genome clusters (``source`` genome, ``novel_NNN``), then the read clusters
+    (``source`` reads, ``unannotated_NNN``; skipped with unannotated=False).
 
     ``is_fasta`` (optional, e.g. the curated IS FASTA): each element is aligned
     to it and the best hit is reported in ``known_hit`` - useful because an
@@ -706,6 +1227,11 @@ def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_read
 
     ``min_reads`` counts reads whose insert overlaps the cluster reciprocally
     (absorbed partial inserts are reported in n_partial_reads but not counted).
+
+    Read clusters: ``max_consensus_reads`` members closest to the medoid
+    build the consensus; ``consensus_flank`` bp at each consensus end are
+    searched for TIRs. Plasmid DRs come from the DR finder tables in
+    ``dr_dir`` (default <data_dir>/insertions; NA when absent).
 
     Further keyword arguments override CHARACTERISE_DEFAULTS (max_tir,
     min_tir_len, min_tir_identity, min_tir_score, edge_run, trim_mismatch,
@@ -725,6 +1251,8 @@ def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_read
         if data_dir is None:
             raise ValueError("out_dir is required when data_dir is not given")
         out_dir = os.path.join(data_dir, "novel_elements")
+    if dr_dir is None and data_dir is not None:
+        dr_dir = os.path.join(data_dir, "insertions")
     os.makedirs(out_dir, exist_ok=True)
     tsv_path = os.path.join(out_dir, "novel_elements.tsv")
     fasta_path = os.path.join(out_dir, "novel_elements.fasta")
@@ -738,9 +1266,14 @@ def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_read
         logger.setLevel(logging.INFO)
     work = tempfile.mkdtemp(prefix="novel_", dir=out_dir)
     try:
-        params = dict(min_reads=min_reads, min_overlap=min_overlap, end_window=end_window, **cparams)
+        params = dict(min_reads=min_reads, min_overlap=min_overlap, end_window=end_window,
+                      unannotated=unannotated, max_consensus_reads=max_consensus_reads,
+                      consensus_flank=consensus_flank, consensus_base_fraction=consensus_base_fraction,
+                      polish_rounds=polish_rounds, **cparams)
         logger.info("novel_elements: genome %s, %d sample(s), parameters %s", genome_fasta, len(samples), params)
-        inserts = read_genome_inserts(samples)
+        drs = read_plasmid_drs(dr_dir, [x[0] for x in samples])
+        logger.info("plasmid DRs: %d DR-finder rows from %s", len(drs), dr_dir)
+        inserts = read_inserts(samples, ("Genome",))
         logger.info("%d Genome inserts in total", len(inserts))
         rows, records = [], []
         if inserts:
@@ -765,18 +1298,29 @@ def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_read
                 sample_counts = Counter(p["sample"] for p in payloads)
                 strands = Counter(p["hit"]["strand"] for p in payloads)
                 sites, n_sites = _site_summary([p["ref_pos"] for p in payloads], site_tolerance)
-                row = {"cluster_id": cid, "contig": c["contig"],
+                row = {"cluster_id": cid, "source": "genome", "contig": c["contig"],
                        "n_reads": len(c["members"]), "n_partial_reads": len(c["partial"]),
                        "n_samples": len(sample_counts),
                        "samples": ";".join(f"{s}:{n}" for s, n in sorted(sample_counts.items())),
                        "insert_strands": ";".join(f"{s}:{n}" for s, n in sorted(strands.items())),
                        "est_start": est_s, "est_end": est_e, "start_spread": sp_s, "end_spread": sp_e,
+                       "consensus_reads": NA, "consensus_length": NA, "read_identity": NA,
                        "n_plasmid_sites": n_sites, "plasmid_sites": sites, "genome_copies": "",
                        "similar_clusters": "", "known_hit": "",
-                       **char}
+                       **plasmid_dr_summary(payloads, drs), **char}
                 rows.append(row)
                 records.append((cid, f"{c['contig']}:{char['start']}-{char['end']} "
                                      f"len={char['length']} verdict={char['verdict']}", element))
+        if unannotated:
+            un = read_inserts(samples, ("Unannotated",))
+            logger.info("%d Unannotated inserts in total", len(un))
+            if un:
+                urows, urecs = read_clusters(un, work, threads, min_reads, min_overlap, site_tolerance,
+                                             max_consensus_reads, drs, consensus_flank, cparams,
+                                             consensus_base_fraction, polish_rounds)
+                logger.info("%d Unannotated cluster(s) with >= %d reads", len(urows), min_reads)
+                rows += urows
+                records += urecs
         with open(fasta_path, "w") as fh:
             for cid, desc, seq in records:
                 fh.write(f">{cid} {desc}\n")
@@ -796,8 +1340,9 @@ def main_novel_elements(data_dir=None, genome_fasta=None, out_dir=None, min_read
             w.writeheader()
             for row in rows:
                 w.writerow(row)
-        verdicts = Counter(r["verdict"] for r in rows)
-        logger.info("%d cluster(s) with >= %d reads: %s", len(rows), min_reads, dict(verdicts))
+        verdicts = Counter((r["source"], r["verdict"]) for r in rows)
+        logger.info("%d cluster(s) with >= %d reads: %s", len(rows), min_reads,
+                    {f"{a}:{b}": n for (a, b), n in sorted(verdicts.items())})
         logger.info("Outputs: %s, %s", tsv_path, fasta_path)
         return rows
     finally:
@@ -832,6 +1377,8 @@ def _cli(argv=None):
     r.add_argument("--threads", type=int, default=2)
     r.add_argument("--flank_search", type=int, default=60)
     r.add_argument("--is_fasta")
+    r.add_argument("--no_unannotated", action="store_true")
+    r.add_argument("--max_consensus_reads", type=int, default=30)
     k = sub.add_parser("known")
     k.add_argument("fasta")
     k.add_argument("--flank", type=int, default=5)
@@ -839,7 +1386,8 @@ def _cli(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if a.cmd == "run":
         main_novel_elements(a.data_dir, a.genome, a.out_dir, a.min_reads, a.threads, a.flank_search,
-                            is_fasta=a.is_fasta)
+                            is_fasta=a.is_fasta, unannotated=not a.no_unannotated,
+                            max_consensus_reads=a.max_consensus_reads)
     else:
         print("name\tlength\ttir_left\ttir_right\tleft_len\tright_len\tidentity\tscore\tleft_seq\tright_seq")
         for name, length, t in scan_known_tirs(a.fasta, a.flank):

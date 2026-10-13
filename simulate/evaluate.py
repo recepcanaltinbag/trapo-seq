@@ -42,14 +42,21 @@ Conventions scored against
   insertions, IN and SC duplicates, several BLAST HSPs; AUDIT B02/B03/B12).
   Each read is scored once, using a truth-agnostic "primary" call:
   insert finder -> the longest insertion; annotation -> priority
-  IS_DB > Genome > Contamination, then highest BLAST score; DR finder -> the
+  IS_DB > Genome > Unannotated > Contamination, then highest BLAST score; DR finder -> the
   row of the primary insertion if present, otherwise the first row with a
   repeat. Row multiplicity is reported separately.
 * Read-level detection. A truth read is positive if its category is
   is_insertion or novel_insertion. A read is "called" by the insert finder if
   it has any row in insertion_from_bam.tab; it is "called" by the annotation
-  if it has a best_alignment.tab row whose Note is IS_DB or Genome
-  (Contamination rows are reported, not counted as biological calls).
+  if it has a best_alignment.tab row whose Note is IS_DB, Genome or
+  Unannotated (plasmid-flanked insert without IS/genome hit); Contamination
+  rows are reported, not counted as biological calls.
+* Classification. is_insertion is correct only as IS_DB with the true IS.
+  novel_insertion is correct as Genome with a hit overlapping the true genomic
+  source; with --novel_absent (the genome given to blast_annot lacks the novel
+  inserts, e.g. --novel_mode element annotated with the original genome)
+  Unannotated is the correct label instead. Contamination for a true
+  insertion is always wrong (contamination_note_true_insertions).
   Fragmented reads may not contain the insertion at all, so recall is also
   reported on unfragmented reads that pass --min_read_len.
 * Site level. Predicted sites are built without the truth: reads with the same
@@ -73,7 +80,9 @@ from collections import Counter, defaultdict
 
 INSERTION_CATS = ("is_insertion", "novel_insertion")
 NEGATIVE_CATS = ("empty_plasmid", "deletion", "contamination")
-NOTE_PRIORITY = {"IS_DB": 0, "Genome": 1, "Contamination": 2}
+NOTE_PRIORITY = {"IS_DB": 0, "Genome": 1, "Unannotated": 2, "Contamination": 3}
+CALL_NOTES = ("IS_DB", "Genome", "Unannotated")   # biological insertion calls
+NOTE_NAMES = ("IS_DB", "Genome", "Unannotated", "Contamination")
 NA = None  # serialised as "N/A" in TSV, null in JSON
 
 
@@ -441,7 +450,17 @@ def tsd_metrics(pos_reads, plen):
 
 
 # ---------------------------------------------------------------- scoring
-def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, min_support, site_link=15):
+def novel_label_ok(label, novel_absent=False):
+    """Correct site/read label for a novel insertion (see Classification)."""
+    return label == ("Unannotated" if novel_absent else "Genome")
+
+
+def note_pcts(notes, n):
+    return {f"pct_note_{k}": ratio(100.0 * notes.get(k, 0), n) for k in NOTE_NAMES}
+
+
+def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, min_support, site_link=15,
+                  novel_absent=False):
     res = {"files": preds["files"]}
     per_read = []
     finder_by, finder_unmatched = group_by_read(preds["finder"], resolve)
@@ -484,8 +503,12 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
                 rec["class_ok"] = ap["note"] == "IS_DB" and ap["subject"] == t["element"]
                 rec["class_ok_any_row"] = any(r["note"] == "IS_DB" and r["subject"] == t["element"] for r in arows)
             else:
-                rec["class_ok"] = ap["note"] == "Genome" and genome_overlap(ap, t)
-                rec["class_ok_any_row"] = any(r["note"] == "Genome" and genome_overlap(r, t) for r in arows)
+                def novel_ok(r):
+                    if novel_absent:
+                        return r["note"] == "Unannotated"
+                    return r["note"] == "Genome" and genome_overlap(r, t)
+                rec["class_ok"] = novel_ok(ap)
+                rec["class_ok_any_row"] = any(novel_ok(r) for r in arows)
         rec["_ap"], rec["_arows"] = ap, arows
         per_read.append(rec)
 
@@ -519,7 +542,7 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
 
     res["detection_finder"] = detection((lambda r: r["n_finder_rows"] > 0, have_finder))
     res["detection_annot"] = detection(
-        (lambda r: any(x["note"] in ("IS_DB", "Genome") for x in r["_arows"]), have_annot))
+        (lambda r: any(x["note"] in CALL_NOTES for x in r["_arows"]), have_annot))
 
     # ---- multiplicity (B02/B03/B12)
     if have_finder:
@@ -553,9 +576,7 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
             cl[cat] = {"n_annotated": len(rs),
                        "accuracy": ratio(sum(bool(r["class_ok"]) for r in rs), len(rs)),
                        "accuracy_any_row": ratio(sum(bool(r.get("class_ok_any_row")) for r in rs), len(rs)),
-                       "pct_note_IS_DB": ratio(100.0 * notes.get("IS_DB", 0), len(rs)),
-                       "pct_note_Genome": ratio(100.0 * notes.get("Genome", 0), len(rs)),
-                       "pct_note_Contamination": ratio(100.0 * notes.get("Contamination", 0), len(rs))}
+                       **note_pcts(notes, len(rs))}
             if cat == "is_insertion":
                 wrong = Counter((r["element"], r["annot_subject"]) for r in rs
                                 if r["annot_note"] == "IS_DB" and r["annot_subject"] != r["element"])
@@ -568,6 +589,8 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
         rs = [r for r in per_read if r["category"] == "contamination"]
         cl["contamination_reads_not_called"] = ratio(sum(r["n_finder_rows"] == 0 and r["n_annot_rows"] == 0 for r in rs), len(rs))
         cl["contamination_reads_labelled_Contamination"] = sum(r["annot_note"] == "Contamination" for r in rs)
+        unann = Counter(r["category"] for r in per_read if r["annot_note"] == "Unannotated")
+        cl["unannotated_note_by_truth"] = dict(unann)
         res["classification"] = cl
     else:
         res["classification"] = {"available": False}
@@ -609,7 +632,7 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
                 d = interval_dist(centre, cl["rep_lo"], cl["rep_hi"], plen)
                 if d <= tol:
                     lab = site_label(c[0][1])
-                    same = lab == cl["element"] if cl["category"] == "is_insertion" else lab == "Genome"
+                    same = lab == cl["element"] if cl["category"] == "is_insertion" else novel_label_ok(lab, novel_absent)
                     # closest first; ties -> matching label, then larger support
                     cand.append((d, not same, -len(c), i, j))
         used_c, used_t, match = set(), set(), {}
@@ -632,7 +655,8 @@ def score_barcode(truth_rows, preds, clones, resolve, plen, tol, min_read_len, m
                 row.update(clone_id=cl["clone_id"], clone_pos=cl["ref_pos"], clone_element=cl["element"],
                            clone_reads=cl["n_reads"], dist=d)
                 if label is not None:
-                    row["label_ok"] = (label == cl["element"]) if cl["category"] == "is_insertion" else (label == "Genome")
+                    row["label_ok"] = ((label == cl["element"]) if cl["category"] == "is_insertion"
+                                       else novel_label_ok(label, novel_absent))
             sites.append(row)
         matched_clones = {match[i][0] for i in match}
         big = [j for j, cl in enumerate(real) if cl["n_reads"] >= 3]
@@ -682,8 +706,8 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
             if key == "detection_finder":
                 o[f"recall_{cat}"] = ratio(sum(r["n_finder_rows"] > 0 for r in rs), len(rs))
             else:
-                o[f"recall_{cat}"] = ratio(sum(r["annot_note"] in ("IS_DB", "Genome") or
-                                               any(n in ("IS_DB", "Genome") for n in r["annot_notes_all"].split(","))
+                o[f"recall_{cat}"] = ratio(sum(r["annot_note"] in CALL_NOTES or
+                                               any(n in CALL_NOTES for n in r["annot_notes_all"].split(","))
                                                for r in rs), len(rs))
         overall[key] = o
     pos = [r for r in per_read_all if r["category"] in INSERTION_CATS and r["n_finder_rows"]]
@@ -702,12 +726,12 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
             o[cat] = {"n_annotated": len(rs),
                       "accuracy": ratio(sum(bool(r["class_ok"]) for r in rs), len(rs)),
                       "accuracy_any_row": ratio(sum(bool(r.get("class_ok_any_row")) for r in rs), len(rs)),
-                      "pct_note_IS_DB": ratio(100.0 * notes.get("IS_DB", 0), len(rs)),
-                      "pct_note_Genome": ratio(100.0 * notes.get("Genome", 0), len(rs)),
-                      "pct_note_Contamination": ratio(100.0 * notes.get("Contamination", 0), len(rs))}
-        contam = Counter()
+                      **note_pcts(notes, len(rs))}
+        contam, unann = Counter(), Counter()
         for c in cls:
             contam.update(c["contamination_note_by_truth"])
+            unann.update(c.get("unannotated_note_by_truth", {}))
+        o["unannotated_note_by_truth"] = dict(unann)
         o["contamination_note_by_truth"] = dict(contam)
         o["contamination_note_total_reads"] = sum(contam.values())
         o["contamination_note_true_insertions"] = sum(contam[c] for c in INSERTION_CATS)
@@ -736,7 +760,8 @@ def aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, 
     return overall
 
 
-def evaluate(sim_dir, results_dir, tol=20, min_read_len=0, min_support=1, barcodes=None, refs=None, site_link=15):
+def evaluate(sim_dir, results_dir, tol=20, min_read_len=0, min_support=1, barcodes=None, refs=None, site_link=15,
+             novel_absent=False):
     truth, clones, plen, have_seq = load_truth(sim_dir, refs)
     resolve = make_id_resolver(truth)
     by_bc = defaultdict(list)
@@ -747,13 +772,15 @@ def evaluate(sim_dir, results_dir, tol=20, min_read_len=0, min_support=1, barcod
     for bc in bcs:
         preds = load_predictions(results_dir, bc)
         res, per_read, sites = score_barcode(by_bc[bc], preds, [c for c in clones if c["barcode"] == bc],
-                                             resolve, plen, tol, min_read_len, min_support, site_link)
+                                             resolve, plen, tol, min_read_len, min_support, site_link,
+                                             novel_absent)
         per_barcode[bc] = res
         per_read_all += per_read
         sites_all += sites
     overall = aggregate(per_barcode, per_read_all, sites_all, clones, resolve, plen, tol, min_read_len, min_support)
     meta = {"sim_dir": os.path.abspath(sim_dir), "results_dir": os.path.abspath(results_dir), "tol_bp": tol,
             "min_read_len": min_read_len, "min_support": min_support, "site_link_bp": site_link, "plasmid_len": plen,
+            "novel_absent": novel_absent,
             "sequences_loaded": have_seq,
             "position_convention": ("0-based. position.error = circular distance from predicted ref_pos to the "
                                     "ambiguity window [ref_pos - left_ext, ref_pos + tsd_len + right_ext] (TSD plus "
@@ -816,7 +843,8 @@ SUMMARY_KEYS = [
     ("position", "error.median"), ("position", "error.pct_within_0bp"), ("position", "error.pct_within_5bp"),
     ("position", "error.pct_within_10bp"), ("position", "error.pct_within_20bp"),
     ("classification", "is_insertion.accuracy"), ("classification", "is_insertion.pct_note_Contamination"),
-    ("classification", "novel_insertion.accuracy"), ("classification", "contamination_note_true_insertions"),
+    ("classification", "novel_insertion.accuracy"), ("classification", "novel_insertion.pct_note_Unannotated"),
+    ("classification", "contamination_note_true_insertions"),
     ("sites", "event_recall"), ("sites", "site_precision"), ("sites", "spurious_sites"),
     ("tsd", "pct_tsd_reported_nonzero"), ("tsd", "length_accuracy"), ("tsd", "sequence_accuracy"),
     ("tsd", "consistent_accuracy"), ("tsd", "consistent_accuracy_when_reported"),
@@ -849,6 +877,10 @@ def main(argv=None):
     ap.add_argument("-p", "--plasmid", help="Plasmid FASTA (default: path in simulation.json)")
     ap.add_argument("-i", "--is_fasta", help="IS FASTA (default: path in simulation.json)")
     ap.add_argument("-g", "--genome", help="Genome FASTA (default: path in simulation.json)")
+    ap.add_argument("--novel_absent", action="store_true",
+                    help="The genome given to blast_annot lacks the novel inserts (e.g. --novel_mode element "
+                         "annotated with the original genome): Unannotated, not Genome, is then the correct "
+                         "label for novel insertions")
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args(argv)
     for f in ("truth.tsv",):
@@ -856,7 +888,8 @@ def main(argv=None):
             sys.exit(f"{f} not found in {args.sim_dir}")
     report, per_read, sites = evaluate(args.sim_dir, args.results_dir, args.tol, args.min_read_len,
                                        args.min_support, args.barcodes,
-                                       {"plasmid": args.plasmid, "is_fasta": args.is_fasta, "genome": args.genome}, args.site_link)
+                                       {"plasmid": args.plasmid, "is_fasta": args.is_fasta, "genome": args.genome}, args.site_link,
+                                       args.novel_absent)
     write_outputs(report, per_read, sites, args.out_dir)
     lines = summary_lines(report)
     with open(os.path.join(args.out_dir, "summary.tsv"), "w") as fh:

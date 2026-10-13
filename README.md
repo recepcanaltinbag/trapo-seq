@@ -232,7 +232,14 @@ python trapo-seq.py blast_annot_batch -d data -g data/genome.fasta --is_fasta da
 - **--temp** temp directory (default `<input_dir>/temp`)
 - **--keep_temp** keep temporary BLAST files and databases, can be helpful for debugging
 
-Each insertion is classified once, so the table has **one row per insertion**: the best curated IS if it covers at least `--threshold` % of the insert (**IS_DB**), otherwise the best genome hit (**Genome**), otherwise **Contamination**.
+Each insertion is classified once, so the table has **one row per insertion** and one of four **Note** values:
+
+- **IS_DB**: the best curated IS covers at least `--threshold` % of the insert;
+- **Genome**: otherwise, the insert has a hit in the genome;
+- **Unannotated**: no IS or genome hit, but the insert sits inside the plasmid: a CIGAR insertion (`IN` in insertion_from_bam.tab) or a soft-clipped stretch (`SC`) with plasmid alignments on both sides. These are candidate transposition events of an element missing from both the IS FASTA and the genome (characterise them with `novel_elements`);
+- **Contamination**: no hit and evidence of a non-transposition origin: an `SC` stretch at a read end (plasmid on one side only; typically a chimeric read, adapter or foreign DNA) that does not match any both-flanked Unannotated insert of the sample over at least `--threshold` % of the clip or of that insert (if it does, it is the same unknown element and stays **Unannotated**).
+
+Rows without a hit (Unannotated, Contamination) have Subject ID `no blast hit` and Explained 0.
 
 The output of this module is a tabular file (*best_alignment.tab) in the format of:
 
@@ -240,14 +247,28 @@ The output of this module is a tabular file (*best_alignment.tab) in the format 
 |----------|------------|--------------|-------|---------|-------------|-----------|---------------|-------------|------|-----------|---------|------------|
 |   read_1    |   IS30      |    98   |   456   |   0   |     12     |   800    |    10    |   780   |  IS_DB  |  98     |   4000   |    True     |
 |   read_2    |   genome_id      |    99   |   900   |   0   |     13     |   2100    |    15    |   2500   |  Genome  |  99     |   4250   |    False     |
-|   read_3    |   no_blast_hit      |    N/A   |   N/A   |   N/A   |     0     |   0    |    0    |   0   | Contamination  |  0     |   5165   |    True     |
+|   read_3    |   no blast hit      |    N/A   |   N/A   |   N/A   |     0     |   0    |    0    |   0   | Unannotated  |  0     |   4176   |    False     |
+|   read_4    |   no blast hit      |    N/A   |   N/A   |   N/A   |     0     |   0    |    0    |   0   | Contamination  |  0     |   5165   |    True     |
 </br>
 
-The most significant columns in the table are **Explained**, **Note**, and **ref_pos**. The **"Explained"** value indicates how well the insertion aligned(0-100), demonstrating its relevance and matching with the manually curated database (**IS_DB**) or (**Genome**). If it aligns with a part of the **genome** rather than the database ((**IS_DB**), it can potentially represent **a novel insertion**. The **"ref_pos"** value is the insertion point on the reference plasmid, marking the exact location where the insertion occurs. If the insertion is labeled as **Contamination**, the insertion is not coming from genome and can be an artifact related to sequencing, barcoding issues.
+The most significant columns in the table are **Explained**, **Note**, and **ref_pos**. The **"Explained"** value indicates how well the insertion aligned(0-100), demonstrating its relevance and matching with the manually curated database (**IS_DB**) or (**Genome**). If it aligns with a part of the **genome** rather than the database ((**IS_DB**), it can potentially represent **a novel insertion**. The **"ref_pos"** value is the insertion point on the reference plasmid, marking the exact location where the insertion occurs. An **Unannotated** insertion is plasmid-flanked sequence of unknown origin: when many reads carry the same Unannotated insert at several plasmid sites with the same direct repeat, it is most likely a transposable element missing from your IS FASTA and genome. An insertion labelled **Contamination** has plasmid on one side only and matches nothing; it can be an artifact related to sequencing, ligation or barcoding issues. In `dr_finder` output the Subject ID of both is the Note (`Unannotated` / `Contamination`), so `dr_logo` draws separate logos for them.
 
 ## Examining the novel inserts
 
 One of the key advantages of this pipeline is its ability to identify **novel insertions** without relying exclusively on a database, allowing it to detect previously unreported insertions. For example, in the output table above, regions labeled as **'Genome'** in the **'Note'** column represent segments not found in the manually curated IS database. If a certain genomic region (The **'Subject Start' and 'Subject End'** columns indicate the location within the genome.) is observed in multiple reads and has **high 'Explained' (%)** values, you may want to extract this genomic section for further examination. You can search it against IS databases like [ISFinder](https://www-is.biotoul.fr/index.php) or use [BLAST on the NCBI website](https://blast.ncbi.nlm.nih.gov/Blast.cgi) to see which genes are in. 
+
+The `novel_elements` module does this automatically (run it after `dr_finder`):
+
+```
+python trapo-seq.py novel_elements -d data -g genome.fasta --is_fasta IS_curated.fasta
+```
+
+It writes `data/novel_elements/novel_elements.tsv` (one row per cluster), `novel_elements.fasta` (element sequences) and a log. The `source` column says how a cluster was built:
+
+- **genome** (`novel_NNN`): **Genome** inserts mapping to the same genomic interval. Boundaries come from the read alignments and terminal inverted repeats (TIRs); the genomic direct repeat (`dr_*` columns), longest ORF and genome copy number are reported, and the sequence is cut from the genome.
+- **reads** (`unannotated_NNN`): **Unannotated** inserts clustered by all-vs-all similarity (minimap2 `ava-ont`). A consensus is built from up to 30 member inserts (MAFFT alignment of the medoid and its closest members, majority vote, then two rounds of majority-vote polishing against minimap2 alignments; no racon/medaka needed) and trimmed to its TIRs when found. There is no genome copy, so genome coordinates and the genomic DR are `NA`; `consensus_length`, `consensus_reads` and `read_identity` (median identity of the members to the consensus) describe the consensus.
+
+For both sources the plasmid insertion sites (`plasmid_sites`, `n_plasmid_sites`) and the plasmid target-site duplication from `dr_finder` (`plasmid_dr_len`, `plasmid_dr_seq`, `plasmid_dr_support`, `plasmid_dr_counts`) are reported. The `verdict` is `mobile_element_candidate` (TIR plus DR or a long ORF), `partial_evidence`, or `genome_segment` / `no_element_evidence`; read clusters use the plasmid DR as DR evidence.
 
 ## Stats of Transposons
 
@@ -265,15 +286,16 @@ An example output file (*.rcp) of this module:
   - **?** -> number of transposons
   - **IS_Family, IS_Name, %, #** -> IS Family, IS Name, Percentage, Count 
   - **---** -> splitting conditions
-  - **#** -> metadata: total insertions and their IS_DB / Genome / Contamination breakdown. Percentages are relative to IS_DB insertions; insertions (not BLAST rows) are counted.
+  - **#** -> metadata: total insertions and their IS_DB / Genome / Unannotated / Contamination breakdown (all four are always written). Percentages are relative to IS_DB insertions; insertions (not BLAST rows) are counted. The heatmap ignores these lines.
 ```
 is_stats.rcp:
 
 >barcode01
 ?40
-#total_insertions=52
+#total_insertions=60
 #IS_DB=40
 #Genome=9
+#Unannotated=8
 #Contamination=3
 #percentage_denominator=IS_DB
 IS5, ISPa41, 50.00, 20

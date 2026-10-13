@@ -1,7 +1,8 @@
 """Sequence logos of direct repeats (TSDs) and insertion-point histograms.
 
 INPUT:  ``<input_folder>/*_insertions.csv`` written by ``dr_finder``.
-OUTPUT: per Subject ID (IS name) in ``output_folder``:
+OUTPUT: per Subject ID (IS name, genome contig, or ``Unannotated`` /
+``Contamination`` for inserts without BLAST hit) in ``output_folder``:
   ``<IS>_insertion_points_histogram.pdf`` and, when at least two DRs exist,
   ``<IS>_overlap_sequence_logo.pdf``.
 

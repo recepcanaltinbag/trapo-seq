@@ -5,7 +5,8 @@
 #   >condition
 #   ?<number of IS_DB insertions>            (denominator of the percentages)
 #   #total_insertions=<all annotated insertions>
-#   #IS_DB=<n>  #Genome=<n>  #Contamination=<n>  (one per line; other Note values too)
+#   #IS_DB=<n>  #Genome=<n>  #Unannotated=<n>  #Contamination=<n>
+#                                            (one per line, always all four; other Note values too)
 #   #percentage_denominator=IS_DB
 #   IS_family, IS_name, percentage, count
 #   ---
@@ -13,7 +14,9 @@
 #
 #Counting unit (B41): one insertion = one unique `Query ID`. If the table has several
 #rows for the same Query ID, one row is chosen: IS_DB rows win over Genome over
-#Contamination, then the highest Score.
+#Unannotated over Contamination, then the highest Score.
+#Unannotated = insert flanked by plasmid but without IS/genome hit (a candidate
+#novel element, see l_novel_elements); it is reported, not used in the IS percentages.
 #-------------------------------------
 import logging
 import os
@@ -22,7 +25,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-NOTE_ORDER = ["IS_DB", "Genome", "Contamination"]
+NOTE_ORDER = ["IS_DB", "Genome", "Unannotated", "Contamination"]
 
 
 def split_subject_id(subject_id):

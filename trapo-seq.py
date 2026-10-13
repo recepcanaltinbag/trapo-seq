@@ -141,7 +141,7 @@ def main():
     map_dist_parser.add_argument("-o", "--output", type=str, required=True, help="Out File")
     map_dist_parser.add_argument("-f", "--fastq", type=str, default=None, help="Optional raw fastq, to report the fraction of reads mapped")
 
-    novel_parser = subparsers.add_parser("novel_elements", help="Cluster and characterise novel (non-database) inserts: boundaries, TIRs, genomic DR, longest ORF")
+    novel_parser = subparsers.add_parser("novel_elements", help="Cluster and characterise novel inserts (Genome and Unannotated): boundaries, TIRs, DRs, longest ORF, read consensus. Run dr_finder first for plasmid DRs; needs minimap2 and mafft")
     novel_parser.add_argument("-d", "--input_dir", type=str, required=True, help="Data folder with barcode folders (after blast_annot_batch)")
     novel_parser.add_argument("-g", "--genome_fasta", type=str, required=True, help="Genome FASTA, the same one used for blast_annot_batch")
     novel_parser.add_argument("--is_fasta", type=str, default=None, help="Curated IS FASTA, to flag clusters that are copies of known IS (recommended)")
@@ -155,6 +155,12 @@ def main():
     novel_parser.add_argument("--min_dr_len", type=int, default=3, help="Minimum genomic DR length counted as evidence, default: 3")
     novel_parser.add_argument("--min_orf_aa", type=int, default=200, help="Minimum longest ORF (aa) counted as evidence, default: 200")
     novel_parser.add_argument("--keep_temp", action="store_true", help="Keep temporary files")
+    novel_parser.add_argument("--no_unannotated", action="store_true", help="Skip read-consensus clusters of Unannotated inserts")
+    novel_parser.add_argument("--max_consensus_reads", type=int, default=30, help="Reads used per consensus, default: 30")
+    novel_parser.add_argument("--consensus_flank", type=int, default=20, help="bp searched for TIRs at consensus ends, default: 20")
+    novel_parser.add_argument("--consensus_base_fraction", type=float, default=0.4, help="Min fraction of reads supporting a consensus base, default: 0.4")
+    novel_parser.add_argument("--polish_rounds", type=int, default=2, help="Consensus polishing rounds, default: 2")
+    novel_parser.add_argument("--dr_dir", type=str, default=None, help="dr_finder output folder, default: <input_dir>/insertions")
 
     test_parser = subparsers.add_parser("test", help="to test the pipeline")
 
@@ -277,7 +283,10 @@ def main():
                                 flank_search=args.flank_search, is_fasta=args.is_fasta,
                                 keep_temp=args.keep_temp, min_tir_len=args.min_tir_len,
                                 min_tir_identity=args.min_tir_identity, min_tir_score=args.min_tir_score,
-                                min_dr_len=args.min_dr_len, min_orf_aa=args.min_orf_aa)
+                                min_dr_len=args.min_dr_len, min_orf_aa=args.min_orf_aa,
+                                unannotated=not args.no_unannotated, max_consensus_reads=args.max_consensus_reads,
+                                consensus_flank=args.consensus_flank, dr_dir=args.dr_dir,
+                                consensus_base_fraction=args.consensus_base_fraction, polish_rounds=args.polish_rounds)
 
         #TEST
         elif args.command == "test":

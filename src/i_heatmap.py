@@ -5,6 +5,8 @@
 #  high panel: IS with > 15 % of the IS_DB insertions in at least one condition
 #  low panel : IS with <= 15 % in every condition (own colour scale)
 #Only non-empty panels are drawn (B42).
+#Only IS_DB insertions are plotted: the Genome / Unannotated / Contamination counts
+#are '#' metadata lines in the .rcp file and are ignored here.
 #-------------------------------------
 import logging
 import os

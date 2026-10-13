@@ -240,6 +240,7 @@ def test_main_on_handmade_tables(tmp_path):
     assert (r["contig"], r["start"], r["end"]) == ("chr_1", s, e)
     assert r["n_reads"] == 4 and r["samples"] == "s 1:4" and r["n_plasmid_sites"] == 2
     assert r["dr_len"] == 5 and r["dr_left_seq"] == dr and r["tir_found"]
+    assert r["source"] == "genome" and r["plasmid_dr_len"] == "NA"     # no DR-finder output
     for name in ("novel_elements.tsv", "novel_elements.fasta", "novel_elements.log"):
         assert (out / name).is_file()
     assert sorted(os.listdir(out)) == ["novel_elements.fasta", "novel_elements.log", "novel_elements.tsv"]
@@ -294,6 +295,7 @@ def test_end_to_end_recovers_simulated_elements(tmp_path, capsys):
     # Other clusters may only be host copies of curated IS elements whose
     # inserts were labelled Genome; they must be flagged by known_hit.
     others = [r for r in rows if r["cluster_id"] not in matched]
+    assert all(r["source"] == "genome" for r in rows)       # the genome contains the elements
     assert all(r["known_hit"] for r in others)
     with capsys.disabled():
         print("\n[novel elements] (element, start err, end err, TIR len err, DR found, DR true):", report,

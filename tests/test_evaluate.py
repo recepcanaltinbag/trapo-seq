@@ -241,3 +241,44 @@ def test_headered_finder_table(sim, results):
     report, per_read, _ = run(sim, results)
     assert per_read["barcode01_r000001"]["pred_ref_pos"] == 1003
     assert report["per_barcode"][BC]["detection_finder"]["tp"] == 1
+
+
+def _relabel(results, old, new):
+    p = results / BC / "best_alignment.tab"
+    p.write_text(p.read_text().replace(old, new))
+
+
+def test_unannotated_is_a_call_and_scored(sim, results):
+    # r3 (true IS insertion) and r7 (empty plasmid) without hit -> Unannotated
+    _relabel(results, "Contamination", "Unannotated")
+    report, per_read, _ = run(sim, results)
+    a = report["per_barcode"][BC]["detection_annot"]
+    assert (a["tp"], a["fp"], a["fn"]) == (4, 1, 1)                     # Unannotated counts as a call
+    assert per_read["barcode01_r000003"]["class_ok"] is False          # an IS must be IS_DB
+    c = report["per_barcode"][BC]["classification"]
+    assert c["is_insertion"]["pct_note_Unannotated"] == pytest.approx(100 / 3)
+    assert c["unannotated_note_by_truth"] == {"is_insertion": 1, "empty_plasmid": 1}
+    assert c["contamination_note_total_reads"] == 0
+    assert report["overall"]["classification"]["unannotated_note_by_truth"] == {"is_insertion": 1, "empty_plasmid": 1}
+    assert report["overall"]["detection_annot"]["recall_is_insertion"] == pytest.approx(3 / 4)
+
+
+def test_novel_absent_accepts_unannotated(sim, results):
+    p = results / BC / "best_alignment.tab"
+    p.write_text(p.read_text().replace(
+        "barcode01-r000004_300_2300\tchr\t97\t1900\t0.0\t1\t2000\t101950\t100001\tGenome",
+        "barcode01-r000004_300_2300\tno blast hit\tN/A\tN/A\tN/A\t0\t0\t0\t0\tUnannotated"))
+    report, per_read, sites = run(sim, results)
+    assert per_read["barcode01_r000004"]["class_ok"] is False          # genome should have contained it
+    assert report["per_barcode"][BC]["classification"]["novel_insertion"]["pct_note_Unannotated"] == 100.0
+    report, per_read, sites = run(sim, results, novel_absent=True)
+    assert per_read["barcode01_r000004"]["class_ok"] is True
+    assert report["per_barcode"][BC]["classification"]["novel_insertion"]["accuracy"] == 1.0
+    lab = {x["clone_id"]: x["label_ok"] for x in sites if x["clone_id"]}
+    assert lab["barcode01_c2"] is True
+    assert report["meta"]["novel_absent"] is True
+    # Genome is then the wrong label for a novel insertion
+    p.write_text(p.read_text().replace("no blast hit\tN/A\tN/A\tN/A\t0\t0\t0\t0\tUnannotated",
+                                       "chr\t97\t1900\t0.0\t1\t2000\t101950\t100001\tGenome"))
+    _, per_read, _ = run(sim, results, novel_absent=True)
+    assert per_read["barcode01_r000004"]["class_ok"] is False

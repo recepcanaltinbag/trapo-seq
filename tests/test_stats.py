@@ -52,17 +52,20 @@ def test_counts_insertions_not_rows_and_reports_denominator(tmp_path):
         ("q2", "NC_000913", 900, "Genome"),       # same insertion also labelled Genome -> IS_DB wins
         ("q3", "NC_000913", 900, "Genome"),
         ("q4", "unknown", 10, "Contamination"),
+        ("q5", "no blast hit", 0, "Unannotated"),
+        ("q5", "no blast hit", 0, "Contamination"),  # Unannotated beats Contamination
+        ("q6", "no blast hit", 0, "Unannotated"),
     ])
     s = h_is_stats.summarize_condition(str(tmp_path / "bc1" / "best_alignment.tab"))
-    assert s["total"] == 4
+    assert s["total"] == 6
     assert s["is_count"] == 2
-    assert s["note_counts"] == {"IS_DB": 2, "Genome": 1, "Contamination": 1}
+    assert s["note_counts"] == {"IS_DB": 2, "Genome": 1, "Unannotated": 2, "Contamination": 1}
     assert sorted(s["rows"]) == [("IS3", "ISPen2", 50.0, 1), ("IS5", "ISPs1", 50.0, 1)]
 
     out = tmp_path / "stats.rcp"
     h_is_stats.main_is_stat(str(tmp_path), str(out))
     text = out.read_text()
-    assert ">bc1\n?2\n#total_insertions=4\n#IS_DB=2\n#Genome=1\n#Contamination=1\n" in text
+    assert ">bc1\n?2\n#total_insertions=6\n#IS_DB=2\n#Genome=1\n#Unannotated=2\n#Contamination=1\n" in text
     assert "#percentage_denominator=IS_DB" in text
 
 
@@ -73,7 +76,7 @@ def test_stats_no_is_hits_and_empty_table(tmp_path):
     out = tmp_path / "stats.rcp"
     h_is_stats.main_is_stat(str(tmp_path), str(out))
     text = out.read_text()
-    assert ">a\n?0\n#total_insertions=1\n" in text
+    assert ">a\n?0\n#total_insertions=1\n#IS_DB=0\n#Genome=1\n#Unannotated=0\n#Contamination=0\n" in text
     assert ">b\n?0\n#total_insertions=0\n" in text
     assert ">c" not in text
 
@@ -111,12 +114,13 @@ def test_heatmap_panels(tmp_path, rows):
 
 def test_heatmap_reads_stats_output(tmp_path):
     write_best(str(tmp_path / "d" / "bc1" / "best_alignment.tab"),
-               [("q1", "IS5_ISPs1", 1, "IS_DB"), ("q2", "IS3_ISPa_41", 1, "IS_DB"), ("q3", "g", 1, "Genome")])
+               [("q1", "IS5_ISPs1", 1, "IS_DB"), ("q2", "IS3_ISPa_41", 1, "IS_DB"), ("q3", "g", 1, "Genome"),
+                ("q4", "no blast hit", 0, "Unannotated"), ("q5", "no blast hit", 0, "Contamination")])
     rcp = tmp_path / "s.rcp"
     h_is_stats.main_is_stat(str(tmp_path / "d"), str(rcp))
     df, order = i_heatmap.parse_rcp(str(rcp))
     assert order == ["bc1"]
-    assert sorted(df["Species"]) == ["IS3_ISPa_41", "IS5_ISPs1"]
+    assert sorted(df["Species"]) == ["IS3_ISPa_41", "IS5_ISPs1"]   # Unannotated/Contamination not plotted
     i_heatmap.main_heatmap(str(rcp), str(tmp_path / "h.pdf"), str(tmp_path / "h.tsv"))
     assert (tmp_path / "h.pdf").stat().st_size > 0
 

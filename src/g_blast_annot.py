@@ -5,7 +5,34 @@
 # (2) the host genome, and classified exactly once:
 #   IS_DB         - best IS hit covers >= `threshold` % of the insert
 #   Genome        - otherwise, the insert has a hit in the genome
-#   Contamination - otherwise (no IS hit good enough, no genome hit)
+#   Unannotated   - otherwise (no IS/genome hit), and the insert is flanked by
+#                   plasmid on both sides, or resembles such an insert
+#   Contamination - otherwise: no hit AND evidence of a non-transposition origin
+#
+# CONTAMINATION RULE (data available at annotation time: insert_type and the
+# read length from the mapped-reads FASTA). An insert without IS/genome hit is
+#   * Unannotated if insert_type is IN: a CIGAR insertion inside one plasmid
+#     alignment, so plasmid flanks both sides by construction;
+#   * Unannotated if insert_type is SC and the insert is interior to the read
+#     (query_start > READ_END_TOLERANCE and query_end < read length -
+#     READ_END_TOLERANCE): e_insert_finder reports maximal read stretches not
+#     covered by any plasmid alignment, so an interior stretch has plasmid
+#     alignments on both sides;
+#   * for an SC insert that reaches a read end (plasmid on one side only):
+#     Unannotated if it matches a both-flanked Unannotated insert of the same
+#     sample over >= `threshold` % of the clip or of that insert (BLAST, same
+#     E-value; the same unknown element seen with both flanks in another read;
+#     the second case is a clip holding the element plus a plasmid stub too
+#     short to align, e.g. next to the linearisation site), otherwise
+#     Contamination. A one-sided unknown sequence carries no evidence of an
+#     insertion into the plasmid; it is typically a chimeric read (ligation of
+#     a plasmid molecule to foreign DNA), adapter/barcode sequence or foreign
+#     DNA;
+#   * Unannotated for any other insert_type (no information: conservative).
+# Limitation: two plasmid alignments around an interior SC stretch are not
+# checked for adjacency/strand (a plasmid-foreign-plasmid chimera looks like an
+# insertion). insertion_from_bam.tab carries the reference position of one
+# flank only; a column with both flank positions/strands would allow it.
 #
 # NEEDS: blastn and makeblastdb in PATH, Biopython.
 #
@@ -19,7 +46,8 @@
 #   - Identity/Score/E-value/coordinates describe the best (highest bitscore)
 #     HSP of the chosen subject; Score is the raw BLAST score.
 #   - Explained is the % of the insert covered by the union of non-overlapping
-#     HSPs of the chosen subject (0 for Contamination).
+#     HSPs of the chosen subject (0 for Unannotated and Contamination, whose
+#     Subject ID is "no blast hit").
 #
 # Recep Can Altınbağ, 07 11 2024, v0.2; v0.3 rewritten (audit B10-B19, B52)
 #-------------------------------------
@@ -37,6 +65,12 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 DUMMY_IS_FASTA = os.path.join(MODULE_DIR, "dummy_is_file.fasta")
 
 DEFAULT_EVALUE = 1e-10
+
+NOTES = ("IS_DB", "Genome", "Unannotated", "Contamination")
+
+# An SC insert starting/ending within this many bp of a read end is a read-end
+# clip (e_insert_finder reports such gaps starting at 0 / ending at the read length).
+READ_END_TOLERANCE = 20
 
 OUTPUT_COLUMNS = ["Query ID", "Subject ID", "Identity (%)", "Score", "E-value",
                   "Query Start", "Query End", "Subject Start", "Subject End",
@@ -280,8 +314,12 @@ def filter_partial_is(hsps, partial_threshold, partial_len):
 
 
 def classify(is_hsps, genome_hsps, threshold=70, partial_threshold=80,
-             partial_len=8000):
-    """Classify one insertion. Returns (note, hsp_or_None, explained_percent)."""
+             partial_len=8000, flanked=True):
+    """Classify one insertion. Returns (note, hsp_or_None, explained_percent).
+
+    ``flanked``: whether the insert has plasmid on both sides (see
+    insert_flanked); decides Unannotated vs Contamination when nothing hits.
+    """
     is_hsps = filter_partial_is(is_hsps or [], partial_threshold, partial_len)
     top, cov = best_subject(is_hsps)
     if top is not None and cov >= threshold:
@@ -289,7 +327,16 @@ def classify(is_hsps, genome_hsps, threshold=70, partial_threshold=80,
     top, cov = best_subject(genome_hsps or [])
     if top is not None:
         return "Genome", top, cov
-    return "Contamination", None, 0.0
+    return ("Unannotated" if flanked else "Contamination"), None, 0.0
+
+
+def insert_flanked(insert_type, query_start, query_end, read_len,
+                   tolerance=READ_END_TOLERANCE):
+    """True if the insert has plasmid alignments on both sides (or nothing
+    says otherwise); False only for an SC insert reaching a read end."""
+    if str(insert_type).strip().upper() != "SC" or read_len is None:
+        return True
+    return query_start > tolerance and query_end < read_len - tolerance
 
 
 def _format_row(query_id, note, hsp, explained, ref_pos, is_reverse):
@@ -301,6 +348,54 @@ def _format_row(query_id, note, hsp, explained, ref_pos, is_reverse):
                 hsp["send"]]
     vals += [note, round(explained, 2), ref_pos, is_reverse]
     return "\t".join(str(v) for v in vals) + "\n"
+
+
+def rescue_end_clips(query_fa, clip_names, anchor_names, work_dir, threshold=70,
+                     evalue=DEFAULT_EVALUE, threads=1, task="megablast"):
+    """Names of read-end clips (``clip_names``) that match a both-flanked
+    Unannotated insert (``anchor_names``) over >= threshold % of the clip or
+    of the anchor (a clip holding the whole element plus an unaligned plasmid
+    stub, e.g. an insertion next to the linearisation site).
+
+    Both name lists refer to records of ``query_fa``. Returns a set of names.
+    """
+    os.makedirs(work_dir, exist_ok=True)
+    clip_set, anchor_set = set(clip_names), set(anchor_names)
+    clips_fa = os.path.join(work_dir, "end_clips.fasta")
+    anchors_fa = os.path.join(work_dir, "flanked_unannotated.fasta")
+    with open(clips_fa, "w") as fc, open(anchors_fa, "w") as fa:
+        for rec in SeqIO.parse(query_fa, "fasta"):
+            if rec.id in clip_set:
+                fc.write(f">{rec.id}\n{rec.seq}\n")
+            elif rec.id in anchor_set:
+                fa.write(f">{rec.id}\n{rec.seq}\n")
+    db = ensure_blast_db(anchors_fa, work_dir)
+    out = os.path.join(work_dir, "end_clips_vs_unannotated.tsv")
+    run_blast(clips_fa, db, out, evalue, threads, task)
+    rescued = set()
+    for qname, hsps in parse_blast_tab(out, evalue).items():
+        top, cov = best_subject(hsps)
+        if top is not None and (cov >= threshold or subject_coverage(hsps) >= threshold):
+            rescued.add(qname)
+    return rescued
+
+
+def subject_coverage(hsps):
+    """Best % of a subject covered by the union of its HSPs (on the subject)."""
+    best = 0.0
+    by_subject = {}
+    for h in hsps:
+        by_subject.setdefault(h["subject"], []).append(sorted((h["sstart"], h["send"])))
+    for subject, ivs in by_subject.items():
+        slen = next(h["slen"] for h in hsps if h["subject"] == subject)
+        covered, end = 0, 0
+        for a, b in sorted(ivs):
+            a = max(a, end + 1)
+            if b >= a:
+                covered += b - a + 1
+            end = max(end, b)
+        best = max(best, 100.0 * covered / slen)
+    return best
 
 
 #----------------------------------------------------------------- main -----
@@ -353,12 +448,12 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
     genome_out = os.path.join(temp_dir, f"{tag}_genome_blast.tsv")
     created += [query_fa, is_out, genome_out]
 
-    insertions = []   # (qname, query_id, ref_pos, is_reverse, qual)
+    insertions = []   # (qname, query_id, ref_pos, is_reverse, qual, flanked)
     seen = set()
     reads = SeqIO.index(mapped_fasta, "fasta")
     try:
         with open(query_fa, "w") as fh:
-            for read_id, qs, qe, _qlen, ref_pos, qual, _itype, is_reverse in tab_data:
+            for read_id, qs, qe, _qlen, ref_pos, qual, itype, is_reverse in tab_data:
                 query_id = f"{read_id}_{qs}_{qe}"
                 if query_id in seen:
                     continue
@@ -367,13 +462,15 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
                     print(f"Warning: read {read_id} not found in {mapped_fasta}; skipping {query_id}",
                           file=sys.stderr)
                     continue
-                seq = str(reads[read_id].seq[qs:qe])
+                read_seq = reads[read_id].seq
+                seq = str(read_seq[qs:qe])
                 if not seq:
                     print(f"Warning: empty insert sequence for {query_id}; skipping", file=sys.stderr)
                     continue
                 qname = f"q{len(insertions)}"
                 fh.write(f">{qname}\n{seq}\n")
-                insertions.append((qname, query_id, ref_pos, is_reverse, qual))
+                flanked = insert_flanked(itype, qs, qe, len(read_seq))
+                insertions.append((qname, query_id, ref_pos, is_reverse, qual, flanked))
     finally:
         reads.close()
 
@@ -387,14 +484,31 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
         genome_hits = parse_blast_tab(genome_out, evalue)
     print('Blast Processes were Ended')
 
+    classified = []
+    for qname, query_id, ref_pos, is_reverse, qual, flanked in insertions:
+        note, hsp, explained = classify(is_hits.get(qname), genome_hits.get(qname),
+                                        threshold, partial_threshold, partial_len, flanked)
+        classified.append([qname, query_id, note, hsp, explained, ref_pos, is_reverse, qual])
+
+    # Read-end clips without hit: rescued as Unannotated when they match a
+    # both-flanked Unannotated insert of this sample (see CONTAMINATION RULE).
+    rescued = set()
+    contam = [c[0] for c in classified if c[2] == "Contamination"]
+    anchors = [c[0] for c in classified if c[2] == "Unannotated"]
+    if contam and anchors:
+        rescue_dir = os.path.join(temp_dir, f"{tag}_unannotated_db")
+        created.append(rescue_dir)
+        rescued = rescue_end_clips(query_fa, contam, anchors, rescue_dir, threshold,
+                                   evalue, threads, task)
     notes = {}
     rows = []
-    for qname, query_id, ref_pos, is_reverse, qual in insertions:
-        note, hsp, explained = classify(is_hits.get(qname), genome_hits.get(qname),
-                                        threshold, partial_threshold, partial_len)
+    for qname, query_id, note, hsp, explained, ref_pos, is_reverse, qual in classified:
+        if qname in rescued:
+            note = "Unannotated"
         if debug:
             print(query_id, note, f"explained={explained:.2f}",
-                  hsp["subject"] if hsp else "", f"quality={qual}")
+                  hsp["subject"] if hsp else "", f"quality={qual}",
+                  "(read-end clip matching a flanked Unannotated insert)" if qname in rescued else "")
         notes[query_id] = note
         rows.append(_format_row(query_id, note, hsp, explained, ref_pos, is_reverse))
 
@@ -412,7 +526,8 @@ def main_annot(tab_file, mapped_fasta, genom_fasta, is_fasta=None,
             except OSError:
                 pass
 
-    counts = {n: list(notes.values()).count(n) for n in ("IS_DB", "Genome", "Contamination")}
-    print(f"Classified: {counts}")
+    counts = {n: list(notes.values()).count(n) for n in NOTES}
+    print(f"Classified: {counts}" + (f" ({len(rescued)} read-end clip(s) Unannotated by similarity "
+                                      f"to flanked Unannotated inserts)" if rescued else ""))
     print(f"Outputs {output_csv} were recorded.")
     return notes

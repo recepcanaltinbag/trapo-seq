@@ -22,14 +22,17 @@ overlap of the two flanks on the plasmid is the direct repeat.
   that stop up to MAX_EXTEND bp short of the IS because of a sequencing error.
   IS hits that miss terminal IS bases are extended by the missing bases; pass
   ``is_fasta`` (IS lengths) to do this at both IS ends. Without IS boundaries
-  (Genome / novel inserts) a flank can extend into the insert by chance base
+  (Genome / Unannotated / Contamination inserts: every Note other than IS_DB is
+  handled the same way) a flank can extend into the insert by chance base
   matches, so the DR length is then an upper bound (+1 bp in ~1/3 of cases).
 
 Output: ``<input_dir>/insertions/<sample>_insertions.csv``, one row per
 insertion. Columns (unchanged ones first):
 
 ``Read ID, Subject ID, Query Start CSV, Query End CSV`` - read and insertion
-coordinates as in the input.
+coordinates as in the input. Subject ID is the annotation subject; for inserts
+without a BLAST hit (Note Unannotated or Contamination, Subject ID
+``no blast hit``) it is the Note, so dr_logo groups them separately.
 ``Start Subject, End Subject`` - plasmid coordinates of the target site: first
 base after the insertion on the plasmid-right side and last base before it on
 the plasmid-left side. For a DR these are the first and last base of the
@@ -311,6 +314,17 @@ def read_is_lengths(is_fasta):
     return lengths
 
 
+NO_HIT_NOTES = {"Unannotated", "Contamination"}
+
+
+def _dr_subject(row):
+    """Subject ID written to the DR table: the Note for inserts without a hit."""
+    note = str(row.get("Note", "")).strip()
+    if note in NO_HIT_NOTES:
+        return note
+    return row.get("Subject ID")
+
+
 def _is_bounds(row, q_st, is_lengths=None):
     """1-based inclusive read coordinates of an IS_DB hit, else (None, None).
 
@@ -360,7 +374,7 @@ def find_drs_for_sample(best_alignment_path, reads_fasta, plasmid_seq,
     try:
         with open(query_fa, "w") as fh:
             for idx, row in df.iterrows():
-                base = {"Read ID": None, "Subject ID": row.get("Subject ID"),
+                base = {"Read ID": None, "Subject ID": _dr_subject(row),
                         "Query Start CSV": None, "Query End CSV": None,
                         "Overlap Sequence": "N/A"}
                 parsed = parse_query_id(row["Query ID"])

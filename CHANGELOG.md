@@ -27,6 +27,18 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   cluster each, boundaries exact for 53/59 and within 2 bp for all, TIR found
   for 58/59, genomic DR exact for 53/59; random genome intervals give 1.1 %
   `mobile_element_candidate`.
+- **`Unannotated` label**: inserts with plasmid on both sides but no IS or
+  genome hit are no longer called *Contamination*. *Contamination* is kept for
+  read-end clips that do not resemble any both-flanked insert of the sample.
+  On the bundled test data 34/41 inserts move from Contamination to
+  Unannotated. `.rcp` files gain a `#Unannotated` line; DR logos are drawn
+  separately for Unannotated inserts.
+- `novel_elements` also characterises **Unannotated inserts from the reads
+  alone**: all-vs-all clustering, consensus (MAFFT + pileup polishing), TIR,
+  longest ORF, plasmid DR from `dr_finder`. On simulations where the genome
+  lacks the elements, every element is one cluster with a 99.9–100 % consensus
+  and its TIR found (uniform, ONT r10.4.1, ONT r9.4.1).
+- `evaluate.py --novel_absent` scores Unannotated as correct for novel inserts.
 - Simulator `--error_model ont` with `--ont_profile r9.4.1|r10.4.1`:
   per-read accuracy from a Beta distribution, indel-dominant composition,
   homopolymer length errors, error-correlated qualities; all parameters
