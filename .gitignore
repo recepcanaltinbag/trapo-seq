@@ -10,3 +10,15 @@ test-data/barcode01/*
 !test-data/genome.fasta
 !test-data/plasmid.fasta
 !test-data/IS_curated.fasta
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Test / simulation outputs
+tests/_tmp/
+sim_out/
+
+# Local publication workspace (results, figures, notes) - not versioned
+publication/
