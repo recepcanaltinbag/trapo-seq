@@ -7,11 +7,11 @@
 #
 # Each folder <name>/ must contain <name><SUFFIX> (default SUFFIX: ".fastq").
 # Outputs written into each folder:
-#   01_aligned_to_plasmid.sam, 02_mapped_to_plasmid.bam,
-#   03_sorted_mapped_to_plasmid.bam(.bai), 04_mapped_to_plasmid.fastq,
-#   05_aligned_to_other_genome.sam, 06_aligned_to_other_genome.bam,
-#   07_sorted_aligned_to_other_genome.bam(.bai), 08_mapping_stats.txt,
-#   <name>.fasta
+#   02_mapped_to_plasmid.bam, 03_sorted_mapped_to_plasmid.bam(.bai),
+#   04_mapped_to_plasmid.fastq, 07_sorted_aligned_to_other_genome.bam(.bai),
+#   08_mapping_stats.txt, <name>.fasta
+# minimap2 output is streamed straight into samtools, so no SAM files
+# (formerly 01_*.sam, 05_*.sam, 06_*.bam) are written.
 #
 # Every output is written to a temporary file and renamed only when the step
 # succeeded, so a failed run never leaves a partial file that a later run
@@ -131,12 +131,9 @@ process_folder() {
     local fastq="${name}${FASTQ_SUFFIX}"
     local tmp
 
-    local ALIGNED_PL="01_aligned_to_plasmid.sam"
     local MAPPED_PL="02_mapped_to_plasmid.bam"
     local SORTED_MAPPED_PL="03_sorted_mapped_to_plasmid.bam"
     local MAPPED_PL_FQ="04_mapped_to_plasmid.fastq"
-    local ALIGNED_GN="05_aligned_to_other_genome.sam"
-    local ALIGNED_GN_BM="06_aligned_to_other_genome.bam"
     local ALIGNED_GN_ST="07_sorted_aligned_to_other_genome.bam"
     local OUTPUT_STAT="08_mapping_stats.txt"
     local FASTA_OUT="${name}.fasta"
@@ -153,19 +150,15 @@ process_folder() {
     echo "Genome:  $GENOME"
     REBUILT=false
 
-    echo "STEP 1: mapping to the plasmid (minimap2 $(minimap2 --version))"
-    if needs_build "$ALIGNED_PL"; then
-        tmp=$(tmp_for "$ALIGNED_PL"); CURRENT_TMP=$tmp
-        minimap2 -t "$THREADS" -ax map-ont "$QUERY_FASTA" "$fastq" > "$tmp"
-        commit "$tmp" "$ALIGNED_PL"
-    fi
-
-    echo "STEP 2: keeping mapped reads, sorting, indexing"
+    echo "STEP 1: mapping to the plasmid (minimap2 $(minimap2 --version)), keeping mapped reads"
     if needs_build "$MAPPED_PL"; then
         tmp=$(tmp_for "$MAPPED_PL"); CURRENT_TMP=$tmp
-        samtools view -@ "$THREADS" -b -F 4 -o "$tmp" "$ALIGNED_PL"
+        minimap2 -t "$THREADS" -ax map-ont "$QUERY_FASTA" "$fastq" \
+            | samtools view -@ "$THREADS" -b -F 4 -o "$tmp" -
         commit "$tmp" "$MAPPED_PL"
     fi
+
+    echo "STEP 2: sorting, indexing"
     if needs_build "$SORTED_MAPPED_PL"; then
         tmp=$(tmp_for "$SORTED_MAPPED_PL"); CURRENT_TMP=$tmp
         samtools sort -@ "$THREADS" -o "$tmp" "$MAPPED_PL"
@@ -184,19 +177,10 @@ process_folder() {
     fi
 
     echo "STEP 3: mapping plasmid reads to the genome"
-    if needs_build "$ALIGNED_GN"; then
-        tmp=$(tmp_for "$ALIGNED_GN"); CURRENT_TMP=$tmp
-        minimap2 -t "$THREADS" -ax map-ont "$GENOME" "$MAPPED_PL_FQ" > "$tmp"
-        commit "$tmp" "$ALIGNED_GN"
-    fi
-    if needs_build "$ALIGNED_GN_BM"; then
-        tmp=$(tmp_for "$ALIGNED_GN_BM"); CURRENT_TMP=$tmp
-        samtools view -@ "$THREADS" -b -o "$tmp" "$ALIGNED_GN"
-        commit "$tmp" "$ALIGNED_GN_BM"
-    fi
     if needs_build "$ALIGNED_GN_ST"; then
         tmp=$(tmp_for "$ALIGNED_GN_ST"); CURRENT_TMP=$tmp
-        samtools sort -@ "$THREADS" -o "$tmp" "$ALIGNED_GN_BM"
+        minimap2 -t "$THREADS" -ax map-ont "$GENOME" "$MAPPED_PL_FQ" \
+            | samtools sort -@ "$THREADS" -o "$tmp" -
         commit "$tmp" "$ALIGNED_GN_ST"
     fi
     if [[ "$REBUILT" == true || ! -f "$ALIGNED_GN_ST.bai" ]]; then

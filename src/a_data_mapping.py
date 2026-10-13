@@ -4,9 +4,8 @@ The work is done by ``scripts/01_data_prep_from_py.sh`` (minimap2 + samtools),
 run once with ``data_dir`` as working directory. Each sample folder
 ``<name>/`` must contain ``<name>.fastq``.
 
-Outputs per folder: 01_aligned_to_plasmid.sam, 02_mapped_to_plasmid.bam,
+Outputs per folder: 02_mapped_to_plasmid.bam,
 03_sorted_mapped_to_plasmid.bam(.bai), 04_mapped_to_plasmid.fastq,
-05_aligned_to_other_genome.sam, 06_aligned_to_other_genome.bam,
 07_sorted_aligned_to_other_genome.bam(.bai), 08_mapping_stats.txt, <name>.fasta
 
 Requires minimap2 and samtools in PATH.

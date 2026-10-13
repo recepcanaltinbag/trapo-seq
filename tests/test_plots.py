@@ -238,3 +238,38 @@ def test_polar_plot(tmp_path, arr):
 def test_polar_plot_empty(tmp_path):
     with pytest.raises(ValueError):
         c_01_polar_plot.main_polar([], str(tmp_path / "polar.pdf"))
+
+
+def _fastq(path, records):
+    with open(path, "w") as fh:
+        for name, seq in records:
+            fh.write(f"@{name} extra=desc\n{seq}\n+\n{'I' * len(seq)}\n")
+
+
+def test_filter_matches_biopython_and_keeps_bytes(tmp_path):
+    from Bio import SeqIO
+    fq = tmp_path / "in.fastq"
+    _fastq(fq, [("a", "ACGT" * 30), ("b", "AC"), ("c", "G" * 100), ("d", "T" * 99)])
+    out = tmp_path / "out.fastq"
+    assert b_filtering_based_on_len.filter_fastq_by_length(str(fq), str(out), 100) == 2
+    ids = [r.id for r in SeqIO.parse(str(out), "fastq")]
+    assert ids == ["a", "c"]
+    assert "@a extra=desc\n" in out.read_text()  # header copied unchanged
+
+
+def test_filter_gzip_input(tmp_path):
+    import gzip
+    fq = tmp_path / "in.fastq.gz"
+    with gzip.open(fq, "wt") as fh:
+        fh.write("@a\n" + "A" * 50 + "\n+\n" + "I" * 50 + "\n")
+    out = tmp_path / "out.fastq"
+    assert b_filtering_based_on_len.filter_fastq_by_length(str(fq), str(out), 10) == 1
+
+
+def test_filter_multiline_fastq_falls_back(tmp_path):
+    fq = tmp_path / "in.fastq"
+    fq.write_text("@a\nACGT\nACGT\n+\nIIII\nIIII\n@b\nAC\n+\nII\n")
+    out = tmp_path / "out.fastq"
+    assert b_filtering_based_on_len.filter_fastq_by_length(str(fq), str(out), 5) == 1
+    assert "ACGTACGT" in out.read_text()
+    assert not list(tmp_path.glob("*.tmp*"))

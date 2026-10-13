@@ -121,7 +121,7 @@ python trapo-seq.py filter -f data/barcode01/barcode01_raw.fastq -o data/barcode
 ```
 - **-f** fastq file path
 - **-o** output file path (the **map** module expects `<folder>/<folder>.fastq`, e.g. `barcode01/barcode01.fastq`)
-- **-l** filtering threshold 
+- **-l** filtering threshold (input may be gzipped)
 
 
 # Alignment

@@ -32,6 +32,13 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   plasmid; truth in `elements.tsv`. Default output is unchanged (byte-identical).
 
 ### Changed
+- Mapping streams minimap2 output straight into samtools: the intermediate
+  `01_aligned_to_plasmid.sam`, `05_aligned_to_other_genome.sam` and
+  `06_aligned_to_other_genome.bam` are no longer written (none was used
+  downstream); disk use per sample 2.1 GB → 1.3 GB on 20 k reads.
+- `filter` copies 4-line FASTQ records byte for byte with a plain parser
+  (17.7 s → 1.2 s on 20 k reads), accepts `.gz`, writes atomically, and falls
+  back to Biopython for multi-line FASTQ.
 - `map --threads` (default 4) for minimap2 and samtools: on 20 k simulated
   reads, mapping 138 s → 58 s and the whole pipeline 192 s → 106 s with 8
   threads, identical results.

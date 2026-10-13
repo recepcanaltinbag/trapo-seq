@@ -14,10 +14,9 @@ from src.a_data_mapping import MappingError, main_mapping
 from src.e_insert_finder_from_bam import OUTPUT_NAME
 from src.e_insert_finder_from_bam_batch import main_insert_finder_from_bam_batch
 
-MAP_OUTPUTS = ["01_aligned_to_plasmid.sam", "02_mapped_to_plasmid.bam",
+MAP_OUTPUTS = ["02_mapped_to_plasmid.bam",
                "03_sorted_mapped_to_plasmid.bam", "03_sorted_mapped_to_plasmid.bam.bai",
-               "04_mapped_to_plasmid.fastq", "05_aligned_to_other_genome.sam",
-               "06_aligned_to_other_genome.bam", "07_sorted_aligned_to_other_genome.bam",
+               "04_mapped_to_plasmid.fastq", "07_sorted_aligned_to_other_genome.bam",
                "07_sorted_aligned_to_other_genome.bam.bai", "08_mapping_stats.txt"]
 PLASMID = os.path.join(TEST_DATA, "plasmid.fasta")
 GENOME = os.path.join(TEST_DATA, "genome.fasta")
@@ -150,9 +149,11 @@ def test_fasta_is_written_and_stale_outputs_rebuilt(tmp_path):
     main_mapping(str(data), PLASMID, GENOME)
     assert all(os.stat(folder / n).st_mtime_ns == mtimes[n] for n in MAP_OUTPUTS[:-1])
     # ... but a removed upstream file triggers a rebuild of everything after it.
-    os.remove(folder / "02_mapped_to_plasmid.bam")
+    os.remove(folder / "03_sorted_mapped_to_plasmid.bam")
     main_mapping(str(data), PLASMID, GENOME)
-    assert os.stat(folder / "01_aligned_to_plasmid.sam").st_mtime_ns == mtimes["01_aligned_to_plasmid.sam"]
+    assert os.stat(folder / "02_mapped_to_plasmid.bam").st_mtime_ns == mtimes["02_mapped_to_plasmid.bam"]
+    # no intermediate SAM files are written any more
+    assert not list(folder.glob("*.sam"))
     assert os.stat(folder / "03_sorted_mapped_to_plasmid.bam").st_mtime_ns != mtimes["03_sorted_mapped_to_plasmid.bam"]
     assert os.stat(folder / "07_sorted_aligned_to_other_genome.bam").st_mtime_ns != \
         mtimes["07_sorted_aligned_to_other_genome.bam"]
