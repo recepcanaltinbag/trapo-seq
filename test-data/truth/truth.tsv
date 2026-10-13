@@ -1,0 +1,401 @@
+barcode	read_id	category	clone_id	element	element_family	ref_pos	orientation	tsd_len	tsd_seq	insert_len	genome_contig	genome_start	genome_end	read_strand	fragmented	read_len	read_accuracy_target	read_accuracy	n_errors	n_sub	n_ins	n_del	n_hp_indel
+barcode01	barcode01_r000000	empty_plasmid												-	False	7012	0.9898	0.98946	74	33	15	26	29
+barcode01	barcode01_r000001	empty_plasmid												-	False	7011	0.98907	0.98847	81	43	13	25	23
+barcode01	barcode01_r000002	contamination									Escherichia_coli_K-12	3843890	3851205	-	False	7277	0.9681	0.97006	219	89	46	84	82
+barcode01	barcode01_r000003	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				-	False	8293	0.9516	0.95214	401	174	71	156	136
+barcode01	barcode01_r000004	empty_plasmid												-	False	7009	0.99286	0.99245	53	23	8	22	24
+barcode01	barcode01_r000005	empty_plasmid												-	True	1234	0.9677	0.96675	41	22	10	9	12
+barcode01	barcode01_r000006	empty_plasmid												-	False	6984	0.97457	0.97437	180	63	39	78	79
+barcode01	barcode01_r000007	empty_plasmid												-	False	7022	0.9944	0.99473	37	18	9	10	7
+barcode01	barcode01_r000008	empty_plasmid												-	False	6979	0.97171	0.97053	207	91	36	80	80
+barcode01	barcode01_r000009	is_insertion	barcode01_c008	IS4_IS186B	IS4	4566	-	11	AAGCACATCAT	1339				+	False	8364	0.99188	0.99068	78	39	15	24	22
+barcode01	barcode01_r000010	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	True	1598	0.99388	0.99437	9	4	2	3	4
+barcode01	barcode01_r000011	empty_plasmid												-	False	6999	0.98698	0.98775	86	40	11	35	29
+barcode01	barcode01_r000012	empty_plasmid												-	False	7011	0.99244	0.9926	52	20	10	22	19
+barcode01	barcode01_r000013	empty_plasmid												-	False	7001	0.98792	0.98832	82	28	16	38	32
+barcode01	barcode01_r000014	empty_plasmid												-	False	7008	0.9904	0.99188	57	22	10	25	22
+barcode01	barcode01_r000015	empty_plasmid												+	False	6976	0.96198	0.96056	277	122	54	101	97
+barcode01	barcode01_r000016	empty_plasmid												+	False	6994	0.97155	0.9728	191	88	37	66	77
+barcode01	barcode01_r000017	empty_plasmid												+	False	7017	0.99124	0.99074	65	31	14	20	22
+barcode01	barcode01_r000018	contamination									Escherichia_coli_K-12	2735044	2738854	-	False	3785	0.97095	0.9727	104	35	22	47	33
+barcode01	barcode01_r000019	empty_plasmid												+	False	7001	0.98407	0.98462	108	50	18	40	39
+barcode01	barcode01_r000020	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				+	False	8345	0.9752	0.97565	204	99	36	69	67
+barcode01	barcode01_r000021	is_insertion	barcode01_c007	IS4_ISVsa5	IS4	5224	+	11	GGTTAATTGCG	1329				+	False	8339	0.99196	0.99259	62	22	8	32	26
+barcode01	barcode01_r000022	deletion				6872				-607				+	True	663	0.99592	0.99699	2	1	0	1	0
+barcode01	barcode01_r000023	empty_plasmid												+	True	1573	0.93483	0.93565	102	44	23	35	30
+barcode01	barcode01_r000024	empty_plasmid												+	False	6957	0.95855	0.96113	273	109	49	115	108
+barcode01	barcode01_r000025	is_insertion	barcode01_c004	ISNCY_ISPsncy	ISNCY	3683	+	4	CACA	1351				+	False	8369	0.98633	0.98639	114	45	30	39	46
+barcode01	barcode01_r000026	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	False	12980	0.98359	0.9834	216	91	48	77	64
+barcode01	barcode01_r000027	is_insertion	barcode01_c011	Tn3_ISEc63	Tn3	4083	+	5	CTATC	5981				-	False	12949	0.97427	0.97302	351	143	74	134	132
+barcode01	barcode01_r000028	empty_plasmid												+	False	7008	0.98445	0.98462	108	43	25	40	44
+barcode01	barcode01_r000029	empty_plasmid												+	False	6986	0.97697	0.97679	163	62	32	69	67
+barcode01	barcode01_r000030	empty_plasmid												+	False	6979	0.97957	0.97807	154	60	25	69	57
+barcode01	barcode01_r000031	empty_plasmid												+	False	7009	0.98393	0.98704	91	37	20	34	32
+barcode01	barcode01_r000032	empty_plasmid												+	False	6993	0.97916	0.97836	152	62	30	60	61
+barcode01	barcode01_r000033	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				+	False	8311	0.95591	0.95605	368	146	80	142	131
+barcode01	barcode01_r000034	empty_plasmid												+	False	6959	0.95164	0.95315	329	127	69	133	124
+barcode01	barcode01_r000035	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				-	False	8313	0.96385	0.96107	326	148	59	119	119
+barcode01	barcode01_r000036	is_insertion	barcode01_c000	Tn3_ISEc63	Tn3	2617	+	5	ACCGT	5981				-	False	12957	0.98361	0.98532	191	79	30	82	72
+barcode01	barcode01_r000037	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	True	2030	0.98848	0.98822	24	11	3	10	10
+barcode01	barcode01_r000038	empty_plasmid												+	False	7018	0.99181	0.99089	64	27	16	21	22
+barcode01	barcode01_r000039	empty_plasmid												-	False	7018	0.99436	0.9926	52	25	11	16	20
+barcode01	barcode01_r000040	empty_plasmid												-	False	7002	0.98792	0.98733	89	34	17	38	40
+barcode01	barcode01_r000041	empty_plasmid												-	False	6993	0.99066	0.99003	70	26	7	37	30
+barcode01	barcode01_r000042	empty_plasmid												+	True	944	0.99003	0.9905	9	2	2	5	5
+barcode01	barcode01_r000043	empty_plasmid												+	False	6997	0.99279	0.99146	60	24	5	31	25
+barcode01	barcode01_r000044	empty_plasmid												+	False	6973	0.97299	0.97522	174	64	30	80	75
+barcode01	barcode01_r000045	empty_plasmid												+	False	7011	0.99288	0.99245	53	15	13	25	28
+barcode01	barcode01_r000046	is_insertion	barcode01_c000	Tn3_ISEc63	Tn3	2617	+	5	ACCGT	5981				-	False	12998	0.99656	0.99631	48	25	6	17	16
+barcode01	barcode01_r000047	contamination									Escherichia_coli_K-12	2007444	2011307	+	False	3847	0.98273	0.98162	71	29	13	29	24
+barcode01	barcode01_r000048	is_insertion	barcode01_c000	Tn3_ISEc63	Tn3	2617	+	5	ACCGT	5981				-	False	12951	0.97437	0.97725	296	128	55	113	105
+barcode01	barcode01_r000049	empty_plasmid												+	False	7007	0.99442	0.99459	38	16	3	19	18
+barcode01	barcode01_r000050	empty_plasmid												-	False	7012	0.99519	0.99544	32	7	7	18	18
+barcode01	barcode01_r000051	empty_plasmid												+	True	4984	0.9643	0.96421	180	82	26	72	69
+barcode01	barcode01_r000052	empty_plasmid												-	False	7024	0.98793	0.99089	64	27	19	18	19
+barcode01	barcode01_r000053	empty_plasmid												+	False	6992	0.98553	0.98448	109	32	23	54	52
+barcode01	barcode01_r000054	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				+	False	8346	0.98672	0.98579	119	56	18	45	44
+barcode01	barcode01_r000055	empty_plasmid												-	False	7021	0.99707	0.99744	18	8	4	6	7
+barcode01	barcode01_r000056	empty_plasmid												-	False	7020	0.99773	0.99758	17	4	5	8	7
+barcode01	barcode01_r000057	is_insertion	barcode01_c007	IS4_ISVsa5	IS4	5224	+	11	GGTTAATTGCG	1329				-	False	8287	0.95902	0.95911	342	144	61	137	134
+barcode01	barcode01_r000058	empty_plasmid												+	False	7009	0.99615	0.99601	28	8	3	17	13
+barcode01	barcode01_r000059	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				-	False	8359	0.99224	0.9926	62	20	14	28	18
+barcode01	barcode01_r000060	empty_plasmid												-	True	2732	0.97882	0.97809	60	19	17	24	25
+barcode01	barcode01_r000061	empty_plasmid												+	False	6986	0.97822	0.97893	148	49	31	68	64
+barcode01	barcode01_r000062	empty_plasmid												-	False	7017	0.99397	0.9953	33	11	8	14	15
+barcode01	barcode01_r000063	empty_plasmid												+	False	6971	0.97259	0.97081	205	83	35	87	76
+barcode01	barcode01_r000064	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	False	13001	0.99542	0.99639	47	17	11	19	20
+barcode01	barcode01_r000065	empty_plasmid												+	False	7003	0.9754	0.97295	190	78	46	66	64
+barcode01	barcode01_r000066	is_insertion	barcode01_c012	IS5_IS5	IS5	4022	-	4	ACAT	1195				-	False	8123	0.95097	0.95026	409	166	72	171	157
+barcode01	barcode01_r000067	empty_plasmid												-	True	1824	0.99671	0.99671	6	2	1	3	1
+barcode01	barcode01_r000068	empty_plasmid												+	False	6994	0.98279	0.98462	108	41	19	48	51
+barcode01	barcode01_r000069	is_insertion	barcode01_c005	IS5_IS5	IS5	5565	-	4	ACCT	1195				+	False	8209	0.99185	0.99258	61	28	10	23	19
+barcode01	barcode01_r000070	empty_plasmid												+	False	7019	0.99381	0.99302	49	27	9	13	14
+barcode01	barcode01_r000071	is_insertion	barcode01_c005	IS5_IS5	IS5	5565	-	4	ACCT	1195				+	False	8190	0.98406	0.98492	124	60	16	48	42
+barcode01	barcode01_r000072	empty_plasmid												+	False	6993	0.98306	0.98249	123	41	26	56	52
+barcode01	barcode01_r000073	empty_plasmid												-	False	7017	0.99597	0.99616	27	13	4	10	9
+barcode01	barcode01_r000074	empty_plasmid												+	False	7001	0.97442	0.97409	182	68	46	68	67
+barcode01	barcode01_r000075	empty_plasmid												-	False	6968	0.9668	0.96682	233	92	43	98	91
+barcode01	barcode01_r000076	empty_plasmid												-	True	1776	0.98765	0.98931	19	9	4	6	4
+barcode01	barcode01_r000077	is_insertion	barcode01_c006	Tn3_ISEc63	Tn3	2848	-	5	GCTTA	5981				-	False	12999	0.99537	0.9957	56	28	9	19	21
+barcode01	barcode01_r000078	empty_plasmid												-	False	6963	0.96804	0.96711	231	93	39	99	91
+barcode01	barcode01_r000079	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				-	False	8352	0.98805	0.98889	93	34	19	40	39
+barcode01	barcode01_r000080	empty_plasmid												-	False	6999	0.98221	0.98049	137	67	23	47	51
+barcode01	barcode01_r000081	empty_plasmid												+	False	7017	0.99413	0.99445	39	19	7	13	13
+barcode01	barcode01_r000082	empty_plasmid												-	False	7014	0.99673	0.99658	24	7	4	13	7
+barcode01	barcode01_r000083	empty_plasmid												-	False	7016	0.98821	0.98804	84	41	18	25	31
+barcode01	barcode01_r000084	empty_plasmid												+	False	6938	0.94631	0.94917	357	152	60	145	129
+barcode01	barcode01_r000085	empty_plasmid												-	False	6996	0.96439	0.96469	248	111	55	82	88
+barcode01	barcode01_r000086	contamination									Escherichia_coli_K-12	4149713	4156152	+	False	6405	0.96815	0.96925	198	74	45	79	77
+barcode01	barcode01_r000087	empty_plasmid												+	True	3443	0.97813	0.98067	67	25	9	33	19
+barcode01	barcode01_r000088	contamination									Escherichia_coli_K-12	3478105	3480097	-	False	1975	0.96532	0.96687	66	25	12	29	19
+barcode01	barcode01_r000089	empty_plasmid												+	True	609	0.98424	0.98529	9	4	1	4	2
+barcode01	barcode01_r000090	empty_plasmid												+	False	6987	0.98382	0.98277	121	47	19	55	46
+barcode01	barcode01_r000091	empty_plasmid												-	False	7009	0.98983	0.99046	67	29	12	26	25
+barcode01	barcode01_r000092	empty_plasmid												+	False	6987	0.97699	0.9785	151	69	23	59	61
+barcode01	barcode01_r000093	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				+	False	8372	0.99966	0.99964	3	0	1	2	3
+barcode01	barcode01_r000094	is_insertion	barcode01_c005	IS5_IS5	IS5	5565	-	4	ACCT	1195				+	False	8212	0.99108	0.99076	76	26	20	30	29
+barcode01	barcode01_r000095	is_insertion	barcode01_c008	IS4_IS186B	IS4	4566	-	11	AAGCACATCAT	1339				+	False	8349	0.99138	0.98985	85	27	17	41	35
+barcode01	barcode01_r000096	empty_plasmid												-	False	7015	0.98738	0.98548	102	60	17	25	29
+barcode01	barcode01_r000097	empty_plasmid												-	False	6996	0.984	0.98448	109	38	22	49	50
+barcode01	barcode01_r000098	empty_plasmid												+	True	1041	0.97491	0.97608	25	9	6	10	13
+barcode01	barcode01_r000099	empty_plasmid												-	False	7003	0.99091	0.98932	75	25	15	35	33
+barcode01	barcode01_r000100	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				+	False	8367	0.99647	0.99678	27	9	6	12	14
+barcode01	barcode01_r000101	empty_plasmid												-	False	6989	0.98366	0.9822	125	49	21	55	55
+barcode01	barcode01_r000102	empty_plasmid												-	False	7009	0.98077	0.9822	125	57	27	41	40
+barcode01	barcode01_r000103	empty_plasmid												+	False	7007	0.98956	0.99018	69	27	13	29	28
+barcode01	barcode01_r000104	empty_plasmid												-	False	6983	0.96943	0.97195	197	81	38	78	86
+barcode01	barcode01_r000105	empty_plasmid												-	False	7015	0.99596	0.99487	36	12	8	16	19
+barcode01	barcode01_r000106	empty_plasmid												+	False	6994	0.97873	0.98035	138	57	26	55	59
+barcode01	barcode01_r000107	is_insertion	barcode01_c011	Tn3_ISEc63	Tn3	4083	+	5	CTATC	5981				+	False	12969	0.97876	0.97871	277	129	54	94	96
+barcode01	barcode01_r000108	is_insertion	barcode01_c014	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				-	False	8369	0.99141	0.9926	62	24	17	21	26
+barcode01	barcode01_r000109	empty_plasmid												+	False	6988	0.98525	0.98505	105	44	13	48	30
+barcode01	barcode01_r000110	empty_plasmid												+	False	6981	0.96726	0.96853	221	87	46	88	87
+barcode01	barcode01_r000111	empty_plasmid												+	False	6954	0.94766	0.94917	357	180	54	123	118
+barcode01	barcode01_r000112	empty_plasmid												-	False	7018	0.98845	0.98946	74	31	19	24	29
+barcode01	barcode01_r000113	novel_insertion	barcode01_c003	novel	novel	3613	+	3	GGT	1426	Escherichia_coli_K-12	2409545	2410971	-	False	8258	0.87111	0.87115	1089	445	225	419	304
+barcode01	barcode01_r000114	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				+	False	8321	0.97234	0.971	243	94	46	103	94
+barcode01	barcode01_r000115	empty_plasmid												+	False	6966	0.96424	0.96796	225	72	48	105	86
+barcode01	barcode01_r000116	empty_plasmid												+	False	7003	0.98233	0.98234	124	58	23	43	40
+barcode01	barcode01_r000117	empty_plasmid												-	False	6973	0.97936	0.9775	158	64	22	72	72
+barcode01	barcode01_r000118	empty_plasmid												+	False	7000	0.97051	0.97437	180	79	39	62	69
+barcode01	barcode01_r000119	empty_plasmid												-	False	7023	0.99967	1.0	0	0	0	0	0
+barcode01	barcode01_r000120	is_insertion	barcode01_c011	Tn3_ISEc63	Tn3	4083	+	5	CTATC	5981				+	False	12993	0.9852	0.98416	206	84	53	69	73
+barcode01	barcode01_r000121	empty_plasmid												+	False	7006	0.98838	0.98718	90	31	21	38	35
+barcode01	barcode01_r000122	empty_plasmid												-	False	6991	0.98439	0.98533	103	39	16	48	43
+barcode01	barcode01_r000123	empty_plasmid												-	False	6982	0.95882	0.95842	292	115	68	109	115
+barcode01	barcode01_r000124	empty_plasmid												-	False	6938	0.92996	0.92895	499	210	102	187	174
+barcode01	barcode01_r000125	empty_plasmid												-	False	6993	0.98968	0.98861	80	30	10	40	35
+barcode01	barcode01_r000126	empty_plasmid												+	False	6996	0.98181	0.98092	134	57	25	52	56
+barcode01	barcode01_r000127	empty_plasmid												+	False	7017	0.99521	0.99459	38	16	8	14	15
+barcode01	barcode01_r000128	is_insertion	barcode01_c008	IS4_IS186B	IS4	4566	-	11	AAGCACATCAT	1339				-	False	8366	0.99701	0.99809	16	5	2	9	6
+barcode01	barcode01_r000129	deletion				5309				-198				-	False	6819	0.99432	0.99531	32	18	4	10	12
+barcode01	barcode01_r000130	empty_plasmid												-	True	2373	0.98463	0.98196	43	18	7	18	11
+barcode01	barcode01_r000131	empty_plasmid												+	False	6909	0.93287	0.9345	460	198	74	188	161
+barcode01	barcode01_r000132	empty_plasmid												+	False	7009	0.99006	0.98975	72	32	13	27	26
+barcode01	barcode01_r000133	empty_plasmid												-	False	7011	0.99115	0.99117	62	20	15	27	27
+barcode01	barcode01_r000134	is_insertion	barcode01_c010	Tn3_ISEc63	Tn3	742	-	5	CGCCA	5981				+	False	12954	0.98096	0.98048	254	93	53	108	101
+barcode01	barcode01_r000135	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	True	4278	0.99696	0.99626	16	4	6	6	8
+barcode01	barcode01_r000136	empty_plasmid												-	False	7030	0.99633	0.99658	24	11	10	3	6
+barcode01	barcode01_r000137	empty_plasmid												-	False	6979	0.96627	0.96739	229	101	42	86	91
+barcode01	barcode01_r000138	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	False	12983	0.98895	0.99201	104	40	19	45	39
+barcode01	barcode01_r000139	contamination									Escherichia_coli_K-12	4368896	4375371	-	False	6441	0.96921	0.96757	210	86	45	79	59
+barcode01	barcode01_r000140	empty_plasmid												-	False	7019	0.99872	0.99915	6	2	0	4	4
+barcode01	barcode01_r000141	empty_plasmid												+	False	6996	0.97581	0.97864	150	59	32	59	64
+barcode01	barcode01_r000142	empty_plasmid												-	False	6987	0.96564	0.96782	226	100	45	81	84
+barcode01	barcode01_r000143	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	False	12993	0.99585	0.99623	49	13	10	26	26
+barcode01	barcode01_r000144	empty_plasmid												+	True	3639	0.98461	0.98302	62	32	9	21	22
+barcode01	barcode01_r000145	empty_plasmid												-	False	7005	0.99227	0.99117	62	22	11	29	27
+barcode01	barcode01_r000146	empty_plasmid												+	False	6988	0.97821	0.9785	151	52	32	67	67
+barcode01	barcode01_r000147	empty_plasmid												+	False	6987	0.97844	0.97821	153	63	27	63	61
+barcode01	barcode01_r000148	empty_plasmid												+	False	6997	0.98785	0.98847	81	35	10	36	28
+barcode01	barcode01_r000149	empty_plasmid												-	False	6993	0.97748	0.97793	155	67	29	59	57
+barcode01	barcode01_r000150	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				+	False	12865	0.94478	0.94535	711	293	137	281	257
+barcode01	barcode01_r000151	empty_plasmid												+	True	797	0.98996	0.98745	10	4	3	3	4
+barcode01	barcode01_r000152	empty_plasmid												+	False	6996	0.984	0.98348	116	49	20	47	47
+barcode01	barcode01_r000153	empty_plasmid												+	True	979	0.98272	0.97648	23	10	7	6	2
+barcode01	barcode01_r000154	empty_plasmid												-	False	7003	0.98751	0.98476	107	41	23	43	46
+barcode01	barcode01_r000155	deletion				1379				-143				-	False	6847	0.97674	0.975	172	65	37	70	66
+barcode01	barcode01_r000156	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				-	False	8340	0.97427	0.97577	203	79	43	81	83
+barcode01	barcode01_r000157	empty_plasmid												+	False	6976	0.97953	0.97921	146	57	21	68	61
+barcode01	barcode01_r000158	is_insertion	barcode01_c007	IS4_ISVsa5	IS4	5224	+	11	GGTTAATTGCG	1329				-	False	8350	0.98834	0.98744	105	48	22	35	38
+barcode01	barcode01_r000159	is_insertion	barcode01_c008	IS4_IS186B	IS4	4566	-	11	AAGCACATCAT	1339				-	False	8358	0.9859	0.98555	121	48	29	44	56
+barcode01	barcode01_r000160	is_insertion	barcode01_c002	Tn3_ISEc63	Tn3	6900	-	5	CTTCC	5981				-	False	12940	0.97552	0.97594	313	118	63	132	128
+barcode01	barcode01_r000161	empty_plasmid												-	False	6983	0.97195	0.97053	207	89	39	79	86
+barcode01	barcode01_r000162	empty_plasmid												+	False	7003	0.99289	0.98961	73	37	8	28	26
+barcode01	barcode01_r000163	empty_plasmid												+	False	7003	0.98143	0.9822	125	49	28	48	49
+barcode01	barcode01_r000164	empty_plasmid												-	False	6989	0.98263	0.98576	100	30	18	52	51
+barcode01	barcode01_r000165	empty_plasmid												-	False	6994	0.9761	0.97594	169	66	37	66	74
+barcode01	barcode01_r000166	empty_plasmid												-	False	7025	0.99803	0.99858	10	4	4	2	5
+barcode01	barcode01_r000167	empty_plasmid												+	False	7018	0.99843	0.99829	12	7	0	5	3
+barcode01	barcode01_r000168	is_insertion	barcode01_c007	IS4_ISVsa5	IS4	5224	+	11	GGTTAATTGCG	1329				-	False	8344	0.99407	0.99318	57	18	10	29	27
+barcode01	barcode01_r000169	empty_plasmid												+	False	7020	0.9944	0.99616	27	8	8	11	11
+barcode01	barcode01_r000170	empty_plasmid												-	False	7008	0.9895	0.99089	64	23	13	28	29
+barcode01	barcode01_r000171	novel_insertion	barcode01_c009	novel	novel	5282	-	8	TCCGCTCA	1944	Escherichia_coli_K-12	3867756	3869700	-	True	660	0.9879	0.97734	15	7	3	5	6
+barcode01	barcode01_r000172	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				-	False	8358	0.99092	0.99009	83	31	16	36	36
+barcode01	barcode01_r000173	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				-	False	8221	0.92377	0.92886	596	223	108	265	235
+barcode01	barcode01_r000174	is_insertion	barcode01_c013	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				-	True	1165	0.99891	1.0	0	0	0	0	0
+barcode01	barcode01_r000175	empty_plasmid												-	False	7014	0.98346	0.98491	106	41	28	37	45
+barcode01	barcode01_r000176	empty_plasmid												-	False	6985	0.97662	0.97779	156	62	28	66	63
+barcode01	barcode01_r000177	empty_plasmid												-	False	6984	0.97135	0.97124	202	81	41	80	80
+barcode01	barcode01_r000178	is_insertion	barcode01_c012	IS5_IS5	IS5	4022	-	4	ACAT	1195				-	False	8206	0.98998	0.99124	72	34	11	27	26
+barcode01	barcode01_r000179	empty_plasmid												-	False	6990	0.96536	0.96583	240	99	54	87	89
+barcode01	barcode01_r000180	is_insertion	barcode01_c007	IS4_ISVsa5	IS4	5224	+	11	GGTTAATTGCG	1329				-	False	8322	0.97591	0.97609	200	77	41	82	77
+barcode01	barcode01_r000181	empty_plasmid												-	False	6986	0.9758	0.97636	166	63	33	70	64
+barcode01	barcode01_r000182	empty_plasmid												+	False	6992	0.97741	0.97594	169	64	37	68	69
+barcode01	barcode01_r000183	empty_plasmid												+	False	7001	0.98151	0.98078	135	59	27	49	50
+barcode01	barcode01_r000184	empty_plasmid												+	False	6949	0.96115	0.96298	260	90	48	122	116
+barcode01	barcode01_r000185	empty_plasmid												+	False	7010	0.99354	0.99402	42	17	6	19	19
+barcode01	barcode01_r000186	empty_plasmid												-	False	6993	0.97848	0.97651	165	61	37	67	58
+barcode01	barcode01_r000187	empty_plasmid												-	False	7013	0.98131	0.98263	122	44	34	44	42
+barcode01	barcode01_r000188	empty_plasmid												-	False	6999	0.98528	0.98462	108	40	22	46	46
+barcode01	barcode01_r000189	empty_plasmid												+	False	6977	0.96701	0.96554	242	98	49	95	103
+barcode01	barcode01_r000190	contamination									Escherichia_coli_K-12	3055182	3056857	+	False	1664	0.98068	0.98627	23	6	3	14	4
+barcode01	barcode01_r000191	empty_plasmid												+	False	7010	0.99109	0.99131	61	20	14	27	24
+barcode01	barcode01_r000192	is_insertion	barcode01_c010	Tn3_ISEc63	Tn3	742	-	5	CGCCA	5981				+	False	12869	0.94042	0.94166	759	331	144	284	265
+barcode01	barcode01_r000193	is_insertion	barcode01_c000	Tn3_ISEc63	Tn3	2617	+	5	ACCGT	5981				+	True	2408	0.98495	0.98427	38	13	9	16	18
+barcode01	barcode01_r000194	empty_plasmid												+	False	6973	0.95993	0.95828	293	121	61	111	109
+barcode01	barcode01_r000195	empty_plasmid												+	False	7007	0.98372	0.98348	116	42	29	45	44
+barcode01	barcode01_r000196	empty_plasmid												-	False	7006	0.98958	0.98804	84	33	17	34	29
+barcode01	barcode01_r000197	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	False	12992	0.995	0.9947	69	30	11	28	26
+barcode01	barcode01_r000198	is_insertion	barcode01_c001	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				-	False	12887	0.95737	0.95934	529	191	108	230	218
+barcode01	barcode01_r000199	empty_plasmid												-	True	2118	0.98092	0.98309	36	13	6	17	10
+barcode02	barcode02_r000000	empty_plasmid												-	False	7016	0.99353	0.99274	51	26	9	16	19
+barcode02	barcode02_r000001	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				+	False	8214	0.99615	0.99672	27	11	4	12	8
+barcode02	barcode02_r000002	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				-	False	8305	0.97314	0.9762	199	83	29	87	80
+barcode02	barcode02_r000003	contamination									Escherichia_coli_K-12	2465925	2470424	+	False	4451	0.95075	0.95421	206	86	36	84	77
+barcode02	barcode02_r000004	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8207	0.99024	0.98966	85	42	14	29	25
+barcode02	barcode02_r000005	contamination									Escherichia_coli_K-12	417140	419863	-	False	2709	0.97664	0.97723	62	20	14	28	18
+barcode02	barcode02_r000006	empty_plasmid												+	False	7004	0.99127	0.99203	56	19	9	28	21
+barcode02	barcode02_r000007	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12938	0.97532	0.97602	312	131	55	126	109
+barcode02	barcode02_r000008	empty_plasmid												-	True	2007	0.98081	0.98304	34	14	11	9	10
+barcode02	barcode02_r000009	deletion				6831				-501				+	False	6822	0.98951	0.99122	60	29	11	20	17
+barcode02	barcode02_r000010	empty_plasmid												-	False	7006	0.98553	0.9879	85	36	16	33	29
+barcode02	barcode02_r000011	empty_plasmid												+	False	6999	0.98308	0.98462	108	46	19	43	39
+barcode02	barcode02_r000012	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12953	0.97972	0.97955	266	98	56	112	110
+barcode02	barcode02_r000013	empty_plasmid												-	True	1343	0.99057	0.99256	10	5	2	3	2
+barcode02	barcode02_r000014	empty_plasmid												-	False	6999	0.98402	0.98163	129	61	22	46	38
+barcode02	barcode02_r000015	is_insertion	barcode02_c003	IS5_IS5	IS5	1486	-	4	CTTT	1195				-	False	8206	0.98524	0.98407	131	55	30	46	48
+barcode02	barcode02_r000016	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8117	0.93248	0.93286	552	235	106	211	190
+barcode02	barcode02_r000017	deletion				1583				-155				+	False	6856	0.99585	0.9952	33	9	6	18	17
+barcode02	barcode02_r000018	empty_plasmid												+	False	7005	0.98908	0.98804	84	36	15	33	29
+barcode02	barcode02_r000019	empty_plasmid												+	False	6943	0.94899	0.95159	340	150	55	135	121
+barcode02	barcode02_r000020	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				+	False	8217	0.99713	0.99696	25	12	4	9	9
+barcode02	barcode02_r000021	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8358	0.99483	0.99486	43	16	11	16	18
+barcode02	barcode02_r000022	is_insertion	barcode02_c006	ISNCY_ISPsncy	ISNCY	4967	-	4	CGAA	1351				-	False	8339	0.98175	0.98222	149	64	23	62	52
+barcode02	barcode02_r000023	is_insertion	barcode02_c005	Tn3_ISEc63	Tn3	1383	+	5	CCCCC	5981				-	False	12931	0.96904	0.96941	398	164	78	156	151
+barcode02	barcode02_r000024	empty_plasmid												-	False	7004	0.97709	0.97708	161	58	42	61	64
+barcode02	barcode02_r000025	empty_plasmid												+	True	1203	0.98799	0.98922	13	8	1	4	2
+barcode02	barcode02_r000026	is_insertion	barcode02_c013	Tn3_ISEc63	Tn3	3386	-	5	AAAAG	5981				+	False	12985	0.99197	0.99177	107	39	22	46	52
+barcode02	barcode02_r000027	is_insertion	barcode02_c010	Tn3_ISEc63	Tn3	4738	-	5	CGCGC	5981				+	False	12999	0.99458	0.99454	71	25	18	28	35
+barcode02	barcode02_r000028	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				+	False	12943	0.97495	0.97509	324	130	64	130	125
+barcode02	barcode02_r000029	is_insertion	barcode02_c003	IS5_IS5	IS5	1486	-	4	CTTT	1195				+	False	8203	0.99164	0.99209	65	30	8	27	23
+barcode02	barcode02_r000030	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12984	0.98924	0.99024	127	50	26	51	60
+barcode02	barcode02_r000031	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12968	0.97665	0.9774	294	123	65	106	102
+barcode02	barcode02_r000032	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12999	0.99546	0.99508	64	34	10	20	23
+barcode02	barcode02_r000033	empty_plasmid												-	True	1089	0.99932	1.0	0	0	0	0	0
+barcode02	barcode02_r000034	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12883	0.94389	0.9435	735	293	158	284	279
+barcode02	barcode02_r000035	is_insertion	barcode02_c013	Tn3_ISEc63	Tn3	3386	-	5	AAAAG	5981				-	False	12965	0.97452	0.9734	346	138	82	126	130
+barcode02	barcode02_r000036	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12973	0.98326	0.98293	222	96	45	81	91
+barcode02	barcode02_r000037	empty_plasmid												-	True	580	0.99485	1.0	0	0	0	0	0
+barcode02	barcode02_r000038	empty_plasmid												-	False	7015	0.99333	0.99302	49	27	7	15	15
+barcode02	barcode02_r000039	is_insertion	barcode02_c006	ISNCY_ISPsncy	ISNCY	4967	-	4	CGAA	1351				+	False	8357	0.98969	0.98711	108	49	19	40	34
+barcode02	barcode02_r000040	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	True	9076	0.96067	0.96281	340	128	73	139	146
+barcode02	barcode02_r000041	is_insertion	barcode02_c011	IS5_IS5	IS5	4290	+	4	AACT	1195				+	False	8120	0.938	0.93748	514	202	105	207	176
+barcode02	barcode02_r000042	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8199	0.98579	0.98419	130	51	28	51	47
+barcode02	barcode02_r000043	is_insertion	barcode02_c005	Tn3_ISEc63	Tn3	1383	+	5	CCCCC	5981				-	False	12993	0.99435	0.99423	75	29	15	31	33
+barcode02	barcode02_r000044	empty_plasmid												-	False	6964	0.96876	0.96853	221	90	36	95	78
+barcode02	barcode02_r000045	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12929	0.97066	0.96925	400	180	70	150	145
+barcode02	barcode02_r000046	empty_plasmid												+	False	6925	0.93154	0.93023	490	176	108	206	187
+barcode02	barcode02_r000047	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	13001	0.99636	0.99677	42	14	10	18	20
+barcode02	barcode02_r000048	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12987	0.99286	0.99277	94	30	21	43	42
+barcode02	barcode02_r000049	empty_plasmid												-	False	6972	0.97076	0.97038	208	81	38	89	81
+barcode02	barcode02_r000050	empty_plasmid												-	False	7012	0.98461	0.98505	105	48	23	34	35
+barcode02	barcode02_r000051	is_insertion	barcode02_c003	IS5_IS5	IS5	1486	-	4	CTTT	1195				+	False	8203	0.98454	0.98565	118	53	23	42	44
+barcode02	barcode02_r000052	is_insertion	barcode02_c003	IS5_IS5	IS5	1486	-	4	CTTT	1195				-	False	8210	0.99574	0.99659	28	10	3	15	16
+barcode02	barcode02_r000053	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	True	7897	0.95124	0.95425	364	152	76	136	124
+barcode02	barcode02_r000054	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12871	0.92716	0.92836	932	390	202	340	332
+barcode02	barcode02_r000055	is_insertion	barcode02_c011	IS5_IS5	IS5	4290	+	4	AACT	1195				+	False	8144	0.96168	0.96132	318	140	50	128	114
+barcode02	barcode02_r000056	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8351	0.99589	0.99581	35	15	4	16	13
+barcode02	barcode02_r000057	is_insertion	barcode02_c001	IS5_IS5	IS5	4078	+	4	ATGT	1195				-	True	586	0.99677	0.99489	3	0	1	2	1
+barcode02	barcode02_r000058	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12898	0.95631	0.95549	579	250	109	220	205
+barcode02	barcode02_r000059	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12938	0.97155	0.97017	388	155	81	152	147
+barcode02	barcode02_r000060	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				-	True	3023	0.96163	0.96169	117	46	20	51	58
+barcode02	barcode02_r000061	is_insertion	barcode02_c010	Tn3_ISEc63	Tn3	4738	-	5	CGCGC	5981				-	False	12969	0.97951	0.97809	285	109	68	108	106
+barcode02	barcode02_r000062	empty_plasmid												+	False	6969	0.9636	0.96141	271	105	56	110	107
+barcode02	barcode02_r000063	is_insertion	barcode02_c005	Tn3_ISEc63	Tn3	1383	+	5	CCCCC	5981				+	False	12921	0.96303	0.96279	484	182	107	195	199
+barcode02	barcode02_r000064	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				+	False	8181	0.9773	0.97689	190	83	33	74	76
+barcode02	barcode02_r000065	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8299	0.96277	0.9603	332	148	60	124	115
+barcode02	barcode02_r000066	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8346	0.96487	0.9664	281	106	79	96	110
+barcode02	barcode02_r000067	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				+	False	12832	0.94007	0.93981	783	302	152	329	302
+barcode02	barcode02_r000068	is_insertion	barcode02_c004	IS5_IS5	IS5	5839	+	4	GCAC	1195				-	False	8195	0.98024	0.97762	184	69	44	71	67
+barcode02	barcode02_r000069	empty_plasmid												+	False	7011	0.99102	0.99231	54	18	12	24	28
+barcode02	barcode02_r000070	empty_plasmid												+	False	7003	0.98289	0.98419	111	47	22	42	43
+barcode02	barcode02_r000071	empty_plasmid												+	False	6972	0.96705	0.96355	256	97	54	105	99
+barcode02	barcode02_r000072	empty_plasmid												+	False	6995	0.98292	0.98405	112	40	22	50	52
+barcode02	barcode02_r000073	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12984	0.99326	0.994	78	31	11	36	29
+barcode02	barcode02_r000074	empty_plasmid												-	False	7001	0.97189	0.9728	191	71	49	71	75
+barcode02	barcode02_r000075	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				+	False	8182	0.97414	0.97653	193	75	39	79	71
+barcode02	barcode02_r000076	empty_plasmid												-	False	6996	0.98183	0.98348	116	53	18	45	43
+barcode02	barcode02_r000077	is_insertion	barcode02_c010	Tn3_ISEc63	Tn3	4738	-	5	CGCGC	5981				-	False	12971	0.96965	0.96941	398	170	95	133	156
+barcode02	barcode02_r000078	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	True	1473	0.9868	0.98845	17	10	4	3	3
+barcode02	barcode02_r000079	empty_plasmid												+	False	6996	0.98249	0.98291	120	49	22	49	48
+barcode02	barcode02_r000080	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12961	0.98427	0.98609	181	65	34	82	76
+barcode02	barcode02_r000081	is_insertion	barcode02_c004	IS5_IS5	IS5	5839	+	4	GCAC	1195				+	True	1211	0.9853	0.9868	16	7	4	5	8
+barcode02	barcode02_r000082	empty_plasmid												-	False	6966	0.96491	0.96455	249	108	42	99	93
+barcode02	barcode02_r000083	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12961	0.98286	0.98493	196	80	34	82	76
+barcode02	barcode02_r000084	empty_plasmid												+	False	6987	0.97729	0.97764	157	57	32	68	62
+barcode02	barcode02_r000085	empty_plasmid												-	False	7004	0.97843	0.97793	155	52	42	61	73
+barcode02	barcode02_r000086	deletion				5302				-111				-	False	6865	0.97495	0.97454	176	73	28	75	77
+barcode02	barcode02_r000087	contamination									Escherichia_coli_K-12	4496020	4499454	+	True	1445	0.96381	0.96426	52	20	11	21	16
+barcode02	barcode02_r000088	is_insertion	barcode02_c012	IS5_IS5	IS5	278	-	4	CTGC	1195				-	False	8156	0.96407	0.96838	260	102	46	112	104
+barcode02	barcode02_r000089	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12998	0.99151	0.99047	124	57	28	39	45
+barcode02	barcode02_r000090	empty_plasmid												-	False	7015	0.99813	0.99786	15	3	2	10	10
+barcode02	barcode02_r000091	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	True	2119	0.97134	0.9637	78	30	9	39	26
+barcode02	barcode02_r000092	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12951	0.98318	0.98255	227	97	36	94	86
+barcode02	barcode02_r000093	deletion				1747				-220				-	False	6775	0.97351	0.96854	214	86	50	78	89
+barcode02	barcode02_r000094	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8188	0.98586	0.98443	128	52	21	55	55
+barcode02	barcode02_r000095	empty_plasmid												+	False	7012	0.99389	0.99274	51	20	10	21	23
+barcode02	barcode02_r000096	empty_plasmid												+	False	7012	0.99226	0.99188	57	22	12	23	24
+barcode02	barcode02_r000097	empty_plasmid												-	False	7006	0.98786	0.98875	79	28	17	34	37
+barcode02	barcode02_r000098	empty_plasmid												+	False	7001	0.98283	0.98619	97	37	19	41	34
+barcode02	barcode02_r000099	empty_plasmid												+	False	6976	0.96994	0.9701	210	93	35	82	78
+barcode02	barcode02_r000100	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12953	0.98481	0.98524	192	84	26	82	76
+barcode02	barcode02_r000101	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12941	0.97025	0.96925	400	156	88	156	158
+barcode02	barcode02_r000102	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	13003	0.99661	0.996	52	22	12	18	15
+barcode02	barcode02_r000103	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	True	816	0.98656	0.98295	14	3	3	8	4
+barcode02	barcode02_r000104	is_insertion	barcode02_c004	IS5_IS5	IS5	5839	+	4	GCAC	1195				+	False	8168	0.97201	0.97215	229	105	35	89	83
+barcode02	barcode02_r000105	contamination									Escherichia_coli_K-12	1150896	1152866	-	False	1970	0.98642	0.99239	15	5	5	5	7
+barcode02	barcode02_r000106	empty_plasmid												-	False	6979	0.96915	0.97209	196	80	36	80	81
+barcode02	barcode02_r000107	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12979	0.98852	0.98901	143	57	28	58	59
+barcode02	barcode02_r000108	is_insertion	barcode02_c006	ISNCY_ISPsncy	ISNCY	4967	-	4	CGAA	1351				+	False	8337	0.96332	0.96515	292	125	63	104	102
+barcode02	barcode02_r000109	is_insertion	barcode02_c005	Tn3_ISEc63	Tn3	1383	+	5	CCCCC	5981				-	False	12939	0.97966	0.97978	263	99	47	117	96
+barcode02	barcode02_r000110	empty_plasmid												-	False	7015	0.99467	0.99487	36	18	5	13	13
+barcode02	barcode02_r000111	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12974	0.97913	0.97909	272	107	65	100	103
+barcode02	barcode02_r000112	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12995	0.99521	0.99554	58	30	7	21	21
+barcode02	barcode02_r000113	empty_plasmid												+	False	6995	0.97431	0.97409	182	82	36	64	77
+barcode02	barcode02_r000114	is_insertion	barcode02_c011	IS5_IS5	IS5	4290	+	4	AACT	1195				-	False	8220	0.99859	0.99842	13	9	1	3	3
+barcode02	barcode02_r000115	empty_plasmid												-	False	7016	0.98746	0.98747	88	35	23	30	29
+barcode02	barcode02_r000116	deletion				1834				-528				-	False	6457	0.96003	0.96012	259	115	53	91	88
+barcode02	barcode02_r000117	empty_plasmid												-	False	7006	0.98528	0.98619	97	44	18	35	37
+barcode02	barcode02_r000118	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12993	0.9926	0.9927	95	33	23	39	41
+barcode02	barcode02_r000119	is_insertion	barcode02_c006	ISNCY_ISPsncy	ISNCY	4967	-	4	CGAA	1351				-	False	8362	0.99511	0.99451	46	22	4	20	19
+barcode02	barcode02_r000120	empty_plasmid												-	False	6996	0.98088	0.98206	126	43	28	55	49
+barcode02	barcode02_r000121	is_insertion	barcode02_c003	IS5_IS5	IS5	1486	-	4	CTTT	1195				-	False	8220	0.99706	0.99684	26	18	3	5	4
+barcode02	barcode02_r000122	is_insertion	barcode02_c011	IS5_IS5	IS5	4290	+	4	AACT	1195				+	False	8217	0.99533	0.9955	37	16	8	13	14
+barcode02	barcode02_r000123	novel_insertion	barcode02_c000	novel	novel	6173	+	9	GCAGGTAGC	2066	Escherichia_coli_K-12	526081	528147	+	False	9064	0.97109	0.97109	263	101	64	98	104
+barcode02	barcode02_r000124	empty_plasmid												-	False	7011	0.97863	0.97878	149	53	42	54	63
+barcode02	barcode02_r000125	empty_plasmid												-	False	7020	0.99186	0.99117	62	21	19	22	26
+barcode02	barcode02_r000126	empty_plasmid												-	False	6994	0.98465	0.98391	113	44	20	49	48
+barcode02	barcode02_r000127	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12988	0.98223	0.9814	242	87	67	88	90
+barcode02	barcode02_r000128	empty_plasmid												+	False	7014	0.98801	0.98932	75	26	20	29	24
+barcode02	barcode02_r000129	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12986	0.99215	0.99185	106	43	20	43	42
+barcode02	barcode02_r000130	is_insertion	barcode02_c013	Tn3_ISEc63	Tn3	3386	-	5	AAAAG	5981				-	False	12956	0.97369	0.97202	364	135	88	141	138
+barcode02	barcode02_r000131	is_insertion	barcode02_c010	Tn3_ISEc63	Tn3	4738	-	5	CGCGC	5981				-	False	12994	0.99362	0.99347	85	34	18	33	37
+barcode02	barcode02_r000132	is_insertion	barcode02_c005	Tn3_ISEc63	Tn3	1383	+	5	CCCCC	5981				+	False	12987	0.99395	0.99485	67	29	8	30	25
+barcode02	barcode02_r000133	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12965	0.98749	0.98647	176	68	32	76	61
+barcode02	barcode02_r000134	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12961	0.98815	0.98855	149	59	21	69	59
+barcode02	barcode02_r000135	is_insertion	barcode02_c001	IS5_IS5	IS5	4078	+	4	ATGT	1195				+	False	8171	0.972	0.97166	233	96	43	94	80
+barcode02	barcode02_r000136	is_insertion	barcode02_c001	IS5_IS5	IS5	4078	+	4	ATGT	1195				-	False	8164	0.96755	0.96716	270	106	53	111	97
+barcode02	barcode02_r000137	empty_plasmid												+	False	6988	0.96736	0.96953	214	85	47	82	93
+barcode02	barcode02_r000138	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12949	0.97535	0.97286	353	147	73	133	124
+barcode02	barcode02_r000139	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				+	False	8211	0.98952	0.98881	92	29	26	37	43
+barcode02	barcode02_r000140	empty_plasmid												-	False	7000	0.98392	0.98462	108	39	23	46	45
+barcode02	barcode02_r000141	empty_plasmid												-	False	6970	0.95844	0.96212	266	105	54	107	111
+barcode02	barcode02_r000142	is_insertion	barcode02_c004	IS5_IS5	IS5	5839	+	4	GCAC	1195				+	False	8183	0.96721	0.96582	281	108	67	106	105
+barcode02	barcode02_r000143	is_insertion	barcode02_c002	ISNCY_ISPsncy	ISNCY	6120	+	4	TCCA	1351				-	False	8347	0.98718	0.98842	97	38	14	45	43
+barcode02	barcode02_r000144	empty_plasmid												+	False	6970	0.97385	0.97309	189	72	32	85	75
+barcode02	barcode02_r000145	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12932	0.96616	0.96579	445	170	99	176	175
+barcode02	barcode02_r000146	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12988	0.99527	0.99477	68	25	11	32	28
+barcode02	barcode02_r000147	empty_plasmid												-	False	6985	0.98313	0.98434	110	46	13	51	45
+barcode02	barcode02_r000148	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12997	0.99563	0.99662	44	16	8	20	15
+barcode02	barcode02_r000149	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	13009	0.99918	0.99923	10	6	2	2	2
+barcode02	barcode02_r000150	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8265	0.94446	0.94476	462	184	90	188	163
+barcode02	barcode02_r000151	empty_plasmid												+	False	7017	0.99465	0.99544	32	18	4	10	9
+barcode02	barcode02_r000152	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8192	0.98139	0.98054	160	56	37	67	67
+barcode02	barcode02_r000153	empty_plasmid												-	False	6932	0.95249	0.95543	313	122	50	141	130
+barcode02	barcode02_r000154	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8334	0.98929	0.98792	101	36	18	47	40
+barcode02	barcode02_r000155	contamination									Escherichia_coli_K-12	2384810	2391598	+	False	6741	0.97302	0.97186	191	74	35	82	64
+barcode02	barcode02_r000156	empty_plasmid												-	True	546	0.98782	0.98537	8	3	2	3	1
+barcode02	barcode02_r000157	deletion				4540				-748				+	False	6267	0.98128	0.98231	111	61	21	29	34
+barcode02	barcode02_r000158	is_insertion	barcode02_c013	Tn3_ISEc63	Tn3	3386	-	5	AAAAG	5981				-	False	12978	0.99297	0.99201	104	33	20	51	48
+barcode02	barcode02_r000159	empty_plasmid												-	True	5194	0.98224	0.98293	89	41	14	34	33
+barcode02	barcode02_r000160	empty_plasmid												-	False	7013	0.98565	0.98662	94	36	24	34	37
+barcode02	barcode02_r000161	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12926	0.95494	0.95403	598	249	133	216	224
+barcode02	barcode02_r000162	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12924	0.96585	0.96648	436	183	84	169	157
+barcode02	barcode02_r000163	deletion				2876				-225				+	False	6782	0.96234	0.96455	241	91	67	83	82
+barcode02	barcode02_r000164	empty_plasmid												+	False	6998	0.98247	0.9832	118	41	26	51	48
+barcode02	barcode02_r000165	is_insertion	barcode02_c011	IS5_IS5	IS5	4290	+	4	AACT	1195				-	False	8209	0.9904	0.99039	79	38	14	27	29
+barcode02	barcode02_r000166	is_insertion	barcode02_c012	IS5_IS5	IS5	278	-	4	CTGC	1195				+	False	8206	0.99426	0.99368	52	24	6	22	17
+barcode02	barcode02_r000167	empty_plasmid												-	False	7013	0.98722	0.98832	82	44	14	24	25
+barcode02	barcode02_r000168	empty_plasmid												+	False	6958	0.94156	0.94518	385	156	82	147	146
+barcode02	barcode02_r000169	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12994	0.99263	0.99285	93	36	21	36	35
+barcode02	barcode02_r000170	empty_plasmid												-	False	6976	0.97212	0.97138	201	82	36	83	81
+barcode02	barcode02_r000171	empty_plasmid												-	False	6957	0.96104	0.96341	257	97	47	113	91
+barcode02	barcode02_r000172	is_insertion	barcode02_c008	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				+	False	8324	0.97679	0.97836	181	70	36	75	78
+barcode02	barcode02_r000173	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8121	0.9475	0.94612	443	180	81	182	159
+barcode02	barcode02_r000174	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				-	False	12964	0.97658	0.9774	294	119	65	110	116
+barcode02	barcode02_r000175	contamination									Escherichia_coli_K-12	4150843	4155146	+	False	4298	0.99524	0.99396	26	11	5	10	9
+barcode02	barcode02_r000176	empty_plasmid												-	False	6994	0.979	0.97978	142	57	28	57	61
+barcode02	barcode02_r000177	is_insertion	barcode02_c003	IS5_IS5	IS5	1486	-	4	CTTT	1195				+	False	8210	0.98272	0.98249	144	60	36	48	50
+barcode02	barcode02_r000178	is_insertion	barcode02_c014	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				+	True	2304	0.97961	0.98273	40	20	4	16	12
+barcode02	barcode02_r000179	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12952	0.98388	0.98132	243	92	47	104	104
+barcode02	barcode02_r000180	novel_insertion	barcode02_c000	novel	novel	6173	+	9	GCAGGTAGC	2066	Escherichia_coli_K-12	526081	528147	-	False	9065	0.98121	0.9834	151	62	28	61	58
+barcode02	barcode02_r000181	is_insertion	barcode02_c002	ISNCY_ISPsncy	ISNCY	6120	+	4	TCCA	1351				-	False	8348	0.97667	0.97875	178	68	40	70	64
+barcode02	barcode02_r000182	deletion				5034				-486				-	False	6485	0.95936	0.96023	260	102	53	105	103
+barcode02	barcode02_r000183	is_insertion	barcode02_c007	IS5_IS5	IS5	6438	+	4	CCCT	1195				-	False	8188	0.98205	0.98224	146	48	32	66	65
+barcode02	barcode02_r000184	empty_plasmid												+	False	6986	0.97671	0.9775	158	65	28	65	61
+barcode02	barcode02_r000185	empty_plasmid												-	False	6999	0.98645	0.98462	108	44	20	44	43
+barcode02	barcode02_r000186	is_insertion	barcode02_c013	Tn3_ISEc63	Tn3	3386	-	5	AAAAG	5981				-	False	12991	0.99298	0.99262	96	34	22	40	40
+barcode02	barcode02_r000187	is_insertion	barcode02_c002	ISNCY_ISPsncy	ISNCY	6120	+	4	TCCA	1351				+	False	8320	0.96761	0.96694	277	107	56	114	116
+barcode02	barcode02_r000188	empty_plasmid												+	False	7017	0.99302	0.9926	52	26	10	16	13
+barcode02	barcode02_r000189	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	13007	0.99863	0.99839	21	9	5	7	8
+barcode02	barcode02_r000190	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	13008	0.99998	0.99992	1	0	0	1	0
+barcode02	barcode02_r000191	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12920	0.97367	0.97348	345	128	64	153	134
+barcode02	barcode02_r000192	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12985	0.98801	0.98947	137	51	31	55	57
+barcode02	barcode02_r000193	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	12953	0.98349	0.98378	211	69	43	99	103
+barcode02	barcode02_r000194	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				-	False	13011	0.9984	0.99869	17	9	5	3	4
+barcode02	barcode02_r000195	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12902	0.97034	0.97148	371	134	65	172	165
+barcode02	barcode02_r000196	empty_plasmid												-	False	6989	0.96697	0.96754	228	90	52	86	95
+barcode02	barcode02_r000197	is_insertion	barcode02_c009	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				+	False	12944	0.9761	0.9731	350	163	61	126	121
+barcode02	barcode02_r000198	is_insertion	barcode02_c011	IS5_IS5	IS5	4290	+	4	AACT	1195				+	False	8097	0.93801	0.93554	530	229	88	213	182
+barcode02	barcode02_r000199	is_insertion	barcode02_c012	IS5_IS5	IS5	278	-	4	CTGC	1195				+	False	8161	0.96811	0.96546	284	105	59	120	111

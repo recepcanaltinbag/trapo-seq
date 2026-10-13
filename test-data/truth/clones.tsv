@@ -1,0 +1,31 @@
+barcode	clone_id	category	element	element_family	ref_pos	orientation	tsd_len	tsd_seq	insert_len	genome_contig	genome_start	genome_end	weight	n_reads
+barcode01	barcode01_c000	is_insertion	Tn3_ISEc63	Tn3	2617	+	5	ACCGT	5981				0.046438	4
+barcode01	barcode01_c001	is_insertion	Tn3_ISEc63	Tn3	5091	-	5	AGACA	5981				0.173976	10
+barcode01	barcode01_c002	is_insertion	Tn3_ISEc63	Tn3	6900	-	5	CTTCC	5981				0.0208	1
+barcode01	barcode01_c003	novel_insertion	novel	novel	3613	+	3	GGT	1426	Escherichia_coli_K-12	2409545	2410971	0.028299	1
+barcode01	barcode01_c004	is_insertion	ISNCY_ISPsncy	ISNCY	3683	+	4	CACA	1351				0.032154	1
+barcode01	barcode01_c005	is_insertion	IS5_IS5	IS5	5565	-	4	ACCT	1195				0.017909	3
+barcode01	barcode01_c006	is_insertion	Tn3_ISEc63	Tn3	2848	-	5	GCTTA	5981				0.012753	1
+barcode01	barcode01_c007	is_insertion	IS4_ISVsa5	IS4	5224	+	11	GGTTAATTGCG	1329				0.067698	5
+barcode01	barcode01_c008	is_insertion	IS4_IS186B	IS4	4566	-	11	AAGCACATCAT	1339				0.054412	4
+barcode01	barcode01_c009	novel_insertion	novel	novel	5282	-	8	TCCGCTCA	1944	Escherichia_coli_K-12	3867756	3869700	0.012505	1
+barcode01	barcode01_c010	is_insertion	Tn3_ISEc63	Tn3	742	-	5	CGCCA	5981				0.030661	2
+barcode01	barcode01_c011	is_insertion	Tn3_ISEc63	Tn3	4083	+	5	CTATC	5981				0.028575	3
+barcode01	barcode01_c012	is_insertion	IS5_IS5	IS5	4022	-	4	ACAT	1195				0.031893	2
+barcode01	barcode01_c013	is_insertion	ISNCY_ISPsncy	ISNCY	6917	-	4	AGCA	1351				0.16276	7
+barcode01	barcode01_c014	is_insertion	IS4_IS186B	IS4	4202	+	11	CAGGTTCAGCC	1339				0.279165	8
+barcode02	barcode02_c000	novel_insertion	novel	novel	6173	+	9	GCAGGTAGC	2066	Escherichia_coli_K-12	526081	528147	0.03414	2
+barcode02	barcode02_c001	is_insertion	IS5_IS5	IS5	4078	+	4	ATGT	1195				0.032447	3
+barcode02	barcode02_c002	is_insertion	ISNCY_ISPsncy	ISNCY	6120	+	4	TCCA	1351				0.027658	3
+barcode02	barcode02_c003	is_insertion	IS5_IS5	IS5	1486	-	4	CTTT	1195				0.054573	6
+barcode02	barcode02_c004	is_insertion	IS5_IS5	IS5	5839	+	4	GCAC	1195				0.025131	4
+barcode02	barcode02_c005	is_insertion	Tn3_ISEc63	Tn3	1383	+	5	CCCCC	5981				0.030158	5
+barcode02	barcode02_c006	is_insertion	ISNCY_ISPsncy	ISNCY	4967	-	4	CGAA	1351				0.053282	4
+barcode02	barcode02_c007	is_insertion	IS5_IS5	IS5	6438	+	4	CCCT	1195				0.067897	12
+barcode02	barcode02_c008	is_insertion	IS4_ISVsa5	IS4	6163	+	11	GGTCGAATGGG	1329				0.074252	10
+barcode02	barcode02_c009	is_insertion	Tn3_ISEc63	Tn3	4733	-	5	TTGAA	5981				0.367316	43
+barcode02	barcode02_c010	is_insertion	Tn3_ISEc63	Tn3	4738	-	5	CGCGC	5981				0.027985	4
+barcode02	barcode02_c011	is_insertion	IS5_IS5	IS5	4290	+	4	AACT	1195				0.035314	6
+barcode02	barcode02_c012	is_insertion	IS5_IS5	IS5	278	-	4	CTGC	1195				0.059747	3
+barcode02	barcode02_c013	is_insertion	Tn3_ISEc63	Tn3	3386	-	5	AAAAG	5981				0.055259	5
+barcode02	barcode02_c014	is_insertion	Tn3_ISEc63	Tn3	3618	+	5	TTTTT	5981				0.054842	11

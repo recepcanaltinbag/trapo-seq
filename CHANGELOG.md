@@ -58,6 +58,12 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   plasmid; truth in `elements.tsv`. Default output is unchanged (byte-identical).
 
 ### Changed
+- **Bundled test data replaced by a simulated dataset with known truth**
+  (E. coli K-12 host, pMAT1, 2 barcodes × 200 ONT r10.4.1-like reads,
+  insertion rates 0.3 / 0.6; truth in `test-data/truth/`). The previous
+  46 reads came from a different host than the bundled genome, so most
+  inserts could not be annotated. `trapo-seq test` now also scores the run
+  against the truth and fails if accuracy drops below set minimums.
 - Mapping streams minimap2 output straight into samtools: the intermediate
   `01_aligned_to_plasmid.sam`, `05_aligned_to_other_genome.sam` and
   `06_aligned_to_other_genome.bam` are no longer written (none was used

@@ -7,6 +7,10 @@ test-data/*
 test-data/barcode01/*
 !test-data/barcode01
 !test-data/barcode01/barcode01_raw.fastq
+!test-data/barcode02
+test-data/barcode02/*
+!test-data/barcode02/barcode02_raw.fastq
+!test-data/truth
 !test-data/genome.fasta
 !test-data/plasmid.fasta
 !test-data/IS_curated.fasta
