@@ -72,6 +72,17 @@ All notable changes to trapo-seq. Finding IDs (B01…) refer to
   plasmid origin were placed at position 0 / plasmid end (B08). On simulated
   data, insertion reads placed within 20 bp rose from 66 % to 92 %, with no
   calls on empty-plasmid reads.
+- **DR (target-site duplication) finder rewritten** (B30–B38): correct flank
+  pairing, strand-aware, plasmid coordinates throughout; circular plasmid
+  handled (DRs across the origin); signed repeat length distinguishes DR,
+  blunt insertion and target-site deletion; `--gap` implemented; read IDs
+  with `_` parsed correctly; one BLAST run per sample. Optional `--is_fasta`
+  uses IS lengths to sharpen boundaries. On simulated data: exact TSD length
+  100 % (error-free) and 78.8 % (default errors; 98.1 % within ±1 bp).
+- DR logos: columns no longer shifted by modal-length trimming; MAFFT only
+  for mixed lengths; robust subprocess and figure handling (B36, B37).
+- `src/j_dr_finder_multithread.py` (which had no threads) replaced
+  `src/j_dr_finder.py` (dead duplicate) (B38).
 
 ## [0.1.0]
 - Initial release.

@@ -1,210 +1,171 @@
-#-------------------------------------
-#This code used for sequence logo analysis of Direct Repeats caused by transposition
+"""Sequence logos of direct repeats (TSDs) and insertion-point histograms.
 
-#INPUT: Insertion (.csv file)
-#OUTPUT: Graphs: Sequence Logos and Insertion Coordinates
-#Recep Can Altınbağ, 04 11 2024, v0.0
+INPUT:  ``<input_folder>/*_insertions.csv`` written by ``dr_finder``.
+OUTPUT: per Subject ID (IS name) in ``output_folder``:
+  ``<IS>_insertion_points_histogram.pdf`` and, when at least two DRs exist,
+  ``<IS>_overlap_sequence_logo.pdf``.
 
-#Libs to Load: pandas, matplotlib, logomaker, BioPython, statistics
-#MAFFT needed for MSA
-#-------------------------------------
+DR sequences are reported on the plasmid + strand starting at the first base of
+the target site, so equal-length DRs are already aligned and are used as is.
+Mixed lengths are aligned with MAFFT; afterwards only columns with at most
+``gap_threshold`` percent gaps are kept (columns are never shifted or truncated
+from one end, so positions stay aligned).
+"""
+
+import logging
 import os
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from logomaker import Logo
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
-import numpy as np
-import tempfile
-from Bio import AlignIO, SeqIO
+import shutil
 import subprocess
-import logomaker
-import matplotlib.pyplot as plt
-import statistics
-from collections import Counter
+import tempfile
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import logomaker  # noqa: E402
+import pandas as pd  # noqa: E402
+from Bio import SeqIO  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+COLORS = {"A": "green", "C": "blue", "G": "orange", "T": "red"}
 
 
 def get_sequence_length(fasta_file):
-    """
-    Reads a single-sequence FASTA file and returns the sequence length.
-    
-    Parameters:
-    fasta_file (str): Path to the FASTA file.
-    
-    Returns:
-    int: The length of the sequence.
-    """
-    # Parse the FASTA file and get the first (and only) sequence
-    record = next(SeqIO.parse(fasta_file, "fasta"))
-    return len(record.seq)
+    """Length of the first sequence in a FASTA file."""
+    for record in SeqIO.parse(fasta_file, "fasta"):
+        return len(record.seq)
+    raise ValueError(f"No sequence found in {fasta_file}")
 
 
-# Sometimes the naming can be problematic for file cration, so it is good to clean these type of characters
 def clean_filename(name):
-    return name.replace('::', '_').replace('/', '_').replace('\\', '_')
+    """Make an IS name safe for use in a file name."""
+    for ch in ("::", "/", "\\", " ", ":"):
+        name = name.replace(ch, "_")
+    return name
 
-#MAFFT subprocess
-def run_mafft_silently(input_file, output_file):
-    print('MAFFT')
-    # MAFFT komutunu sessiz bir şekilde çalıştır
-    try:
-        # subprocess.run ile komutu çalıştır
-        result = subprocess.run(
-            ["mafft", "--auto", input_file],
-            stdout=open(output_file, 'w'),  # Çıktıyı dosyaya yönlendir
-            stderr=subprocess.PIPE,  # Hataları yakala
-            check=True,  # Hata durumunda istisna fırlat
-            text=True  # Çıktıyı metin olarak al
-        )
-        return result
-    except subprocess.CalledProcessError as e:
-        print(f"Bir hata oluştu: {e.stderr}")  # Hata mesajını yazdır
-        return None
 
-# Creating temp files and alignment
-def align_sequences_temp(sequences, gap_threshold):
-    if len(sequences) < 2:
-        print('one sequence, warning')
+def run_mafft(input_file, output_file):
+    """Align ``input_file`` with MAFFT into ``output_file``; raise RuntimeError on failure."""
+    if shutil.which("mafft") is None:
+        raise RuntimeError("'mafft' not found in PATH; it is required by dr_logo for DRs of different lengths.")
+    with open(output_file, "w") as out:
+        res = subprocess.run(["mafft", "--auto", "--nuc", "--quiet", input_file],
+                             stdout=out, stderr=subprocess.PIPE, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"MAFFT failed (exit {res.returncode}): {res.stderr.strip()}")
+
+
+def remove_high_gap_columns(aligned, gap_threshold):
+    """Keep only columns whose gap percentage is <= gap_threshold.
+
+    aligned: list of equal-length strings. Returns a list of strings.
+    """
+    if not aligned:
         return []
-    seq_records = []
-    for index, sequence in enumerate(sequences):
-        seq_id = f"seq_{index + 1}"  # ID'leri 'seq_1', 'seq_2' şeklinde oluştur
-        seq_record = SeqRecord(Seq(sequence), id=seq_id)  # Seq objesi oluştur
-        seq_records.append(seq_record)  # Listeye ekle
-
-    with tempfile.NamedTemporaryFile(mode='w+', suffix=".fasta") as temp_input, \
-         tempfile.NamedTemporaryFile(mode='r', suffix=".aln") as temp_output:
-        
-        SeqIO.write(seq_records, temp_input.name, "fasta")
-        
-        run_mafft_silently(temp_input.name, temp_output.name)
-
-        print('End of the MAFFT process')
-        
-        alignment = AlignIO.read(temp_output.name, "fasta")
-    
-    alignment = remove_high_gap_columns(alignment, gap_threshold)
-    print(alignment)
-    return alignment
-
-def remove_high_gap_columns(alignment, gap_threshold):
-    """
-    :param alignment: seqs in list
-    :param gap_threshold: Maximum acceptible gap threshold default 60
-    :return: Cleaned alignment.
-    """
-    # Sütun sayısını belirle
-    num_columns = len(alignment[0].seq)
-    filtered_alignment = []
-
-    for i in range(num_columns):
-       
-        gap_count = ( sum(1 for record in alignment if record.seq[i] == '-') / len(alignment) ) * 100
-        if gap_count < gap_threshold:
-            for j in range(len(alignment)):
-                if len(filtered_alignment) <= j:
-                    filtered_alignment.append('')
-                filtered_alignment[j] += alignment[j].seq[i]
-    
-    return filtered_alignment
+    n = len(aligned)
+    keep = [i for i in range(len(aligned[0]))
+            if 100.0 * sum(s[i] == "-" for s in aligned) / n <= gap_threshold]
+    return ["".join(s[i] for i in keep) for s in aligned]
 
 
-# Finding the length
-def get_best_alignment_length(alignment):
-    trimmed_sequences = []
-    for record in alignment:
-        trimmed_seq = record.strip('-')  # Baştaki ve sondaki boşlukları kaldır
-        trimmed_sequences.append(trimmed_seq)
-    
-    trimmed_lengths = [len(seq) for seq in trimmed_sequences]
-    most_common_length = Counter(trimmed_lengths).most_common(1)[0][0]
-    return most_common_length
-
-# 4. Logo creating
-def create_sequence_logo(alignment, best_length, output_file, safe_name):
-
-    sequences = [str(record)[:best_length].upper() for record in alignment]
-    
-    counts_df = logomaker.alignment_to_matrix(sequences=sequences, to_type='counts')
-    
-    color_scheme = {
-        'A': 'green',
-        'C': 'blue',
-        'G': 'orange',
-        'T': 'red'
-    }
-    
-    plt.figure(figsize=(10, 3)) 
-    logo = logomaker.Logo(counts_df, color_scheme=color_scheme)
-    logo.style_spines(visible=False)  
-    logo.style_spines(spines=['left', 'bottom'], visible=True)
-    logo.style_xticks(rotation=90, fmt='%d') 
-    logo.ax.set_title(f'Overlap Sequence Logo for {safe_name}')
-    plt.title("Sequence Logo") 
-    plt.savefig(output_file, dpi=300) 
-    plt.close()
+def align_sequences(sequences, gap_threshold=60):
+    """Return gap-filtered, column-consistent aligned sequences (list of str)."""
+    seqs = [str(s).upper() for s in sequences if isinstance(s, str) and s and s != "N/A"]
+    if len(seqs) < 2:
+        return seqs
+    if len({len(s) for s in seqs}) == 1:
+        return seqs                      # anchored at the target-site start: already aligned
+    with tempfile.TemporaryDirectory(prefix="trapo_logo_") as tmp:
+        fin, fout = os.path.join(tmp, "in.fasta"), os.path.join(tmp, "out.fasta")
+        with open(fin, "w") as fh:
+            for i, s in enumerate(seqs):
+                fh.write(f">s{i}\n{s}\n")
+        run_mafft(fin, fout)
+        records = {r.id: str(r.seq).upper() for r in SeqIO.parse(fout, "fasta")}
+    aligned = [records[f"s{i}"] for i in range(len(seqs))]
+    return remove_high_gap_columns(aligned, gap_threshold)
 
 
+def create_sequence_logo(aligned, output_file, title):
+    counts = logomaker.alignment_to_matrix(sequences=aligned, to_type="counts",
+                                           characters_to_ignore=".-N")
+    fig, ax = plt.subplots(figsize=(max(4, 0.5 * len(counts) + 2), 3))
+    try:
+        logo = logomaker.Logo(counts, ax=ax, color_scheme=COLORS)
+        logo.style_spines(visible=False)
+        logo.style_spines(spines=["left", "bottom"], visible=True)
+        ax.set_xticks(range(len(counts)))
+        ax.set_xticklabels([str(i + 1) for i in range(len(counts))])
+        ax.set_ylabel("count")
+        ax.set_title(title)
+        fig.tight_layout()
+        fig.savefig(output_file, dpi=300)
+    finally:
+        plt.close(fig)
 
 
-#----------------------------------------------------
-# EXAMPLE USAGE -------------------------------------
-# INPUTS
-'''
-plasmid_fasta = 'data/01_pMAT1_plasmid.fasta'
-input_folder = 'data/insertions'
-# OUTPUTS
-output_folder = 'data/dr_logos'
-gap_threshold = 60
-'''
-#----------------------------------------------------
+def plot_insertion_histogram(points, plasmid_len, output_file, title):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    try:
+        ax.hist(points, bins=60, range=(1, plasmid_len), histtype="stepfilled",
+                edgecolor="orange", linewidth=1.5, color="white")
+        ax.set_xlim(0, plasmid_len)
+        ax.set_title(title)
+        ax.set_xlabel("Insertion point (plasmid bp)")
+        ax.set_ylabel("Frequency")
+        fig.savefig(output_file)
+    finally:
+        plt.close(fig)
+
+
+def _dr_sequences(group):
+    if "Status" in group.columns:
+        mask = group["Status"] == "DR"
+    else:
+        mask = pd.to_numeric(group["Repeat Length"], errors="coerce") > 0
+    seqs = group.loc[mask, "Overlap Sequence"]
+    return [s for s in seqs if isinstance(s, str) and s and s != "N/A"]
 
 
 def main_dr_logo(plasmid_fasta, input_folder, output_folder, gap_threshold=60):
+    """Histogram + DR logo per IS. Returns the list of written files."""
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
     plasmid_len = get_sequence_length(plasmid_fasta)
     os.makedirs(output_folder, exist_ok=True)
 
-    # All _insertions.csv files will be taken into account
-    all_files = [f for f in os.listdir(input_folder) if f.endswith('_insertions.csv')]
+    files = sorted(f for f in os.listdir(input_folder)
+                   if f.endswith("_insertions.csv") and not f.startswith("."))
+    frames = []
+    for f in files:
+        try:
+            frames.append(pd.read_csv(os.path.join(input_folder, f),
+                                      dtype={"Read ID": str, "Subject ID": str, "Overlap Sequence": str}))
+        except (pd.errors.EmptyDataError, pd.errors.ParserError, OSError) as e:
+            logger.warning("Could not read %s: %s", f, e)
+    frames = [df for df in frames if not df.empty]
+    if not frames:
+        logger.warning("No insertions found in %s (*_insertions.csv); nothing to plot", input_folder)
+        return []
+    data = pd.concat(frames, ignore_index=True)
 
-    df_list = []
-    for f in all_files:
-        if f.endswith('.csv') and not f.startswith('.'):  # CSV dosyası ve gizli dosya olmamalı
-            file_path = os.path.join(input_folder, f)
-            try:
-                df_list.append(pd.read_csv(file_path))
-            except Exception as e:
-                print(f"Error reading {f}: {e}")
-
-    # All data frames will be combined
-    all_data = pd.concat(df_list, ignore_index=True)
-    grouped = all_data.groupby('Subject ID')
-
-    for name, group in grouped:
-        safe_name = clean_filename(name)
-        print("Processing: ", safe_name)
-        insertion_points = group['Insertion Point'].tolist()
-        overlap_sequences = group.loc[group['Repeat Length'] > 0, 'Overlap Sequence'].tolist()
-
-
-        # Histogram
-        plt.figure(figsize=(10, 6))
-        plt.hist(insertion_points, bins=60, histtype='stepfilled', edgecolor='orange', linewidth=1.5, color='white')
-
-        plt.xlim(0, plasmid_len)  # X ekseni maksimum değeri
-        plt.title(f'Insertion Points Histogram for {safe_name}')
-        plt.xlabel('Insertion Point')
-        plt.ylabel('Frequency')
-
-        # Saving histograms
-        plt.savefig(os.path.join(output_folder, f'{safe_name}_insertion_points_histogram.pdf'))
-        plt.close()
-
-        alignment = align_sequences_temp(overlap_sequences, gap_threshold)  # 2. MAFFT ile hizalama
-        if len(alignment) < 2:
-            print(f'len of alignment {alignment} is not enough! skipping {safe_name}')
-        else:
-            best_length = get_best_alignment_length(alignment)  # 3. En iyi uzunluk
-            create_sequence_logo(alignment, best_length, os.path.join(output_folder, f'{safe_name}_overlap_sequence_logo.pdf'),safe_name)  # 4. Sekans logosu ve kaydetme
-
+    written = []
+    for name, group in data.dropna(subset=["Subject ID"]).groupby("Subject ID"):
+        safe = clean_filename(str(name))
+        points = pd.to_numeric(group["Insertion Point"], errors="coerce").dropna()
+        if not points.empty:
+            out = os.path.join(output_folder, f"{safe}_insertion_points_histogram.pdf")
+            plot_insertion_histogram(points, plasmid_len, out, f"Insertion points: {name} (n={len(points)})")
+            written.append(out)
+        seqs = _dr_sequences(group)
+        if len(seqs) < 2:
+            logger.info("%s: %d DR sequence(s), no logo", name, len(seqs))
+            continue
+        aligned = align_sequences(seqs, gap_threshold)
+        if not aligned or not aligned[0]:
+            logger.info("%s: no alignment columns left after gap filtering, no logo", name)
+            continue
+        out = os.path.join(output_folder, f"{safe}_overlap_sequence_logo.pdf")
+        create_sequence_logo(aligned, out, f"Direct repeats: {name} (n={len(seqs)})")
+        written.append(out)
+    return written

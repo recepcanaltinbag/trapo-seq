@@ -1,397 +1,462 @@
+"""Direct-repeat (target-site duplication, TSD) finder.
+
+For every insertion in ``<sample>/best_alignment.tab`` the read window
+``read[start - open_gap : end + open_gap]`` is BLASTed against the trap
+plasmid. The plasmid HSP whose read end is closest to the insertion start is
+the *left flank*, the HSP whose read start is closest to the insertion end is
+the *right flank*. Both flanks extend into the duplicated target site, so the
+overlap of the two flanks on the plasmid is the direct repeat.
+
+* Coordinates: insertion coordinates in the ``Query ID`` (``{read}_{start}_{end}``)
+  are 0-based, half-open read coordinates. All reported plasmid coordinates are
+  1-based and lie in ``1..len(plasmid)``.
+* Circular plasmid: flanks are searched against the plasmid concatenated with
+  itself, so flanks spanning the origin are found as one HSP; overlaps are
+  computed modulo the plasmid length and DR sequences are extracted circularly.
+* Strand: a read from the minus strand has its left flank on the plasmid-right
+  side of the insertion; this is handled explicitly.
+* If the annotation hit is an IS from the curated database (``Note == IS_DB``),
+  the IS boundaries on the read are used to clip flank HSPs that extended into
+  the IS by chance base matches (the IS database entry cannot extend past its
+  own ends, so its boundaries are the more reliable ones), and to extend flanks
+  that stop up to MAX_EXTEND bp short of the IS because of a sequencing error.
+  IS hits that miss terminal IS bases are extended by the missing bases; pass
+  ``is_fasta`` (IS lengths) to do this at both IS ends. Without IS boundaries
+  (Genome / novel inserts) a flank can extend into the insert by chance base
+  matches, so the DR length is then an upper bound (+1 bp in ~1/3 of cases).
+
+Output: ``<input_dir>/insertions/<sample>_insertions.csv``, one row per
+insertion. Columns (unchanged ones first):
+
+``Read ID, Subject ID, Query Start CSV, Query End CSV`` - read and insertion
+coordinates as in the input.
+``Start Subject, End Subject`` - plasmid coordinates of the target site: first
+base after the insertion on the plasmid-right side and last base before it on
+the plasmid-left side. For a DR these are the first and last base of the
+duplicated sequence.
+``Insertion Point`` - 1-based plasmid coordinate of the first base of the
+target site (= simulator ``ref_pos + 1``).
+``Repeat Length`` - signed overlap of the two flanks: > 0 direct repeat,
+0 no duplication (blunt insertion), < 0 target-site deletion of that many bases;
+empty when it cannot be computed.
+``Overlap Sequence`` - DR sequence on the plasmid + strand, ``N/A`` otherwise.
+``Read Strand`` - ``+``/``-`` orientation of the read relative to the plasmid.
+``Status`` - DR, no_duplication, target_site_deletion, repeat_too_long,
+left_flank_only, right_flank_only, no_flank_hit, strand_conflict,
+read_not_found, bad_query_id.
+"""
+
+import logging
 import os
+import shutil
+import subprocess
+import tempfile
+
 import pandas as pd
 from Bio import SeqIO
-import sys
-import subprocess
-from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
+
+OUTPUT_COLUMNS = [
+    "Read ID", "Subject ID", "Query Start CSV", "Query End CSV",
+    "Start Subject", "End Subject", "Insertion Point", "Repeat Length",
+    "Overlap Sequence", "Read Strand", "Status",
+]
+BLAST_FIELDS = ["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+                "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qseq", "sseq"]
+SKIP_FOLDERS = {"insertions", "temp-dr-finder"}
+MAX_EXTEND = 10   # bp a flank may be extended to reach a known IS boundary
 
 
-def save_to_csv(df, file_path):
-    # Dosya mevcutsa, başlık olmadan ekle
-    if os.path.isfile(file_path):
-        # Eğer dosya zaten varsa, başlık eklemeden veriyi ekle
-        df.to_csv(file_path, mode='a', header=False, index=False)
-    else:
-        # Eğer dosya mevcut değilse, başlık ile veriyi yaz
-        df.to_csv(file_path, mode='w', header=True, index=False)
-
-
-
-def split_sequences(input_fasta, batch_size, output_dir):
-    """
-    Split the input fasta file into smaller batches.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    
-    sequences = list(SeqIO.parse(input_fasta, "fasta"))
-    batch_count = len(sequences) // batch_size + (1 if len(sequences) % batch_size else 0)
-    
-    batch_files = []
-    for i in range(batch_count):
-        batch_sequences = sequences[i * batch_size: (i + 1) * batch_size]
-        batch_file = os.path.join(output_dir, f"batch_{i+1}.fasta")
-        
-        with open(batch_file, "w") as batch_fasta:
-            SeqIO.write(batch_sequences, batch_fasta, "fasta")
-        
-        batch_files.append(batch_file)
-    
-    return batch_files
-
-
-def get_total_sequences(input_fasta):
-    """
-    Get the total number of sequences in the input FASTA file.
-    """
-    sequences = list(SeqIO.parse(input_fasta, "fasta"))
-    return len(sequences)
-
-def make_blast_db(batch_fasta, db_name):
-    """
-    Create a BLAST database for the given batch fasta file.
-    """
-    subprocess.run(
-        ["makeblastdb", "-in", batch_fasta, "-dbtype", "nucl", "-out", db_name],
-        check=True, 
-        stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL
-    )
-
-def run_blast(query_fasta, db_name, output_file):
-    """
-    Run BLAST on the given query against the given database.
-    """
-    subprocess.run(
-        ["blastn", "-query", query_fasta, "-db", db_name, "-outfmt", "6", "-out", output_file],
-        check=True, 
-        stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL
-    )
-
-def process_blast_m(input_fasta, query_fasta, batch_size, blast_db_dir, output_dir):
-    """
-    Split the database, create BLAST DBs for each batch, run BLAST for the query, and merge the results.
-    """
-    # Step 1: Split the input fasta into smaller batches
-    print("Splitting database into smaller batches...")
-    batch_files = split_sequences(input_fasta, batch_size, blast_db_dir)
-    
-    # Step 2: Run BLAST for each batch
-    output_files = []
-    for idx, batch_file in enumerate(batch_files):
-        simple_loading_bar(idx + 1, len(batch_files))
-        db_name = os.path.join(blast_db_dir, f"batch_{idx+1}_db")
-        output_file = os.path.join(output_dir, f"batch_{idx+1}_blast.out")
-        
-        # Step 2.1: Create BLAST database for this batch
-        #print(f"Creating BLAST DB for {batch_file}...")
-        make_blast_db(batch_file, db_name)
-        
-        # Step 2.2: Run BLAST for the query against the current batch database
-        #print(f"Running BLAST for query against {batch_file}...")
-        run_blast(query_fasta, db_name, output_file)
-        
-        output_files.append(output_file)
-    
-    # Step 3: Merge the output files into one
-    merged_output = os.path.join(output_dir, "merged_blast_results.out")
-    with open(merged_output, "w") as outfile:
-        for file in output_files:
-            with open(file, "r") as infile:
-                outfile.write(infile.read() + "\n")  # Append content from each file
-    
-    print(f"All BLAST results merged into {merged_output}")
-    print('All DBs are ready')
-    return merged_output
-
-
-
-
-
-# BLAST sonuçlarını analiz etmek için fonksiyon
-def analyze_blast_results(query_id, blast_df_raw, query_start_csv, query_end_csv, fasta_path, sequence, threshold, repeat_th):
-
-
-
-    blast_df_raw.columns = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 
-                        'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']
-    
-
-    blast_df = blast_df_raw[blast_df_raw['sseqid'] == query_id].copy()
-
-    # Eğer filtreleme sonucunda hiçbir satır kalmazsa None veya uyarı döndür
-    if blast_df.empty:
-        print(f"No rows found for sseqid: {query_id}")
-        return []  # veya uygun bir değer döndürebilirsiniz
-
-    overlaps = []
-    #print(blast_df)
-    #input()
-    #print(len(blast_df))
-
-    if len(blast_df) == 1:
-        # Tek bir satır varsa, CSV'deki start ve end ile subject start ve end arasındaki yakınlığa bak
-        single_row = blast_df.iloc[0]
-        print('SINGLE:',single_row)
-        # Query Start ve End ile Subject Start ve End arasındaki farkları hesapla
-        query_start_distance = abs(single_row['sstart'] - query_start_csv)
-        query_end_distance = abs(single_row['send'] - query_end_csv)
-        
-        if query_start_distance < query_end_distance:
-            insertion_point = single_row['qstart']
-        else:
-            insertion_point = single_row['qend']
-        
-        repeat_length = 0  # Tek bir satırda overlap hesaplanamaz
-
-        # FASTA dosyasından nükleotidleri al
-        if repeat_length > 0:
-            overlap_sequence = sequence[int(single_row['qstart']) - 1 : int(single_row['qend']) -1]
-        else:
-            overlap_sequence = "N/A"
-        print(insertion_point)
-        overlaps.append({
-            "Query Start CSV": query_start_csv,
-            "Query End CSV": query_end_csv,
-            "Start Subject": single_row['sstart'],
-            "End Subject": single_row['send'],
-            "Insertion Point": insertion_point,
-            "Repeat Length": repeat_length,
-            "Overlap Sequence": overlap_sequence
-        })
-    else:
-        # En yakın subject start ve subject end pozisyonlarını bulma
-        #closest_start_row = blast_df.iloc[(blast_df['sstart'] - query_start_csv).abs().argsort()[:1]]
-        #closest_end_row = blast_df.iloc[(blast_df['send'] - query_end_csv).abs().argsort()[:1]]
-        print('Query start:', query_start_csv, 'Query end:', query_end_csv)
-        print(blast_df['sstart'])
-
-  
-        blast_df['sstart_qs_diff'] = (blast_df['sstart'] - query_start_csv).abs()
-        blast_df['ssend_qs_diff'] = (blast_df['send'] - query_start_csv).abs()
-
-        blast_df['sstart_qe_diff'] = (blast_df['sstart'] - query_end_csv).abs()
-        blast_df['ssend_qe_diff'] = (blast_df['send'] - query_end_csv).abs()
-        
-        closest_row_idx = blast_df[['sstart_qs_diff', 'ssend_qs_diff']].min(axis=1).idxmin()
-        closest_rowE_idx = blast_df[['sstart_qe_diff', 'ssend_qe_diff']].min(axis=1).idxmin()
-
-        print(blast_df)
-
-        print('Closest_row_idx:',closest_row_idx)
-        print('closest_rowE_idx:',closest_rowE_idx)
-
-
-        # Farkın hangi sütunda daha düşük olduğunu kontrol et
-        if blast_df.loc[closest_row_idx, 'sstart_qs_diff'] > threshold and blast_df.loc[closest_row_idx, 'ssend_qs_diff'] > threshold:
-            print('ERROR: Value is bigger than threshold!')
-            
-            
-        else:
-            if blast_df.loc[closest_row_idx, 'sstart_qs_diff'] < blast_df.loc[closest_row_idx, 'ssend_qs_diff']:
-                pMAT1 = blast_df.loc[closest_row_idx, 'qstart']  # sstart_qs_diff küçükse qstart'ı al
-            else:
-                pMAT2 = blast_df.loc[closest_row_idx, 'qend']  # ssend_qs_diff küçükse qend'i al
-                print('forward?')
-        
-        if blast_df.loc[closest_rowE_idx, 'sstart_qe_diff'] > threshold and blast_df.loc[closest_rowE_idx, 'ssend_qe_diff'] > threshold:
-            print('ERROR: Value is bigger than threshold!')
-            
-            
-        else:
-            if blast_df.loc[closest_rowE_idx, 'sstart_qe_diff'] < blast_df.loc[closest_rowE_idx, 'ssend_qe_diff']:
-                pMAT1 = blast_df.loc[closest_rowE_idx, 'qstart']  # sstart_qs_diff küçükse qstart'ı al
-            else:
-                pMAT2 = blast_df.loc[closest_rowE_idx, 'qend']  # ssend_qs_diff küçükse qend'i al
-                print('reverse read?')
-        # Sonucu göster
-        try:
-            print(pMAT1)
-            print('Error pMAT1')
-        except UnboundLocalError:
-            pMAT1 = -1
-        try:
-            print(pMAT2)
-        except UnboundLocalError:
-            print('Error pMAT2')
-            pMAT2 = -1    
-
-        print(f"The lowest value: {pMAT1} : {pMAT2}")
-        #print(blast_df)
-
-        # Careful, Blast results are 1-based. But sequence and programming array indexes are 0-based!
-        # So, for length it has to +1
-        # For [] calculations -> [start -1 : end] will be true!
-        repeat_length = max(0, pMAT2 - pMAT1 + 1)
-        if repeat_length > 0 and pMAT1 >= 0 and pMAT2 >= 0 and repeat_length < repeat_th:
-            overlap_sequence = sequence[pMAT1 - 1 : pMAT2]
-        else:
-            overlap_sequence = "N/A"
-            repeat_length = 0
-        print(pMAT1, repeat_length, overlap_sequence)
-        
-        if pMAT1 > 0:
-            insertion_point = pMAT1
-        elif pMAT2 > 0:
-            insertion_point = pMAT2
-        else:
-            insertion_point = -1
-
-        overlaps.append({
-                "Query Start CSV": query_start_csv,
-                "Query End CSV": query_end_csv,
-                "Start Subject": pMAT1,
-                "End Subject": pMAT2,
-                "Insertion Point": insertion_point,
-                "Repeat Length": repeat_length,
-                "Overlap Sequence": overlap_sequence})
-    return overlaps
-
-def copy_fasta(input_fasta, output_fasta):
-    """
-    Verilen FASTA dosyasını alır ve başka bir dosyaya yazar.
-    
-    :param input_fasta: Okunacak FASTA dosyasının yolu
-    :param output_fasta: FASTA verilerini yazacağımız dosyanın yolu
-    """
+# --------------------------------------------------------------------------
+# small helpers
+# --------------------------------------------------------------------------
+def parse_query_id(query_id):
+    """``{read_id}_{start}_{end}`` -> (read_id, start, end); read IDs may contain '_'."""
+    parts = str(query_id).rsplit("_", 2)
+    if len(parts) != 3:
+        return None
     try:
-        # Girdi dosyasını açma ve çıkış dosyasına yazma
-        with open(input_fasta, 'r') as input_file:
-            with open(output_fasta, 'w') as output_file:
-                # FASTA verilerini kopyala
-                for record in SeqIO.parse(input_file, "fasta"):
-                    SeqIO.write(record, output_file, "fasta")
-        print(f"FASTA data has been successfully written to {output_fasta}")
-    
+        return parts[0], int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+
+
+def read_plasmid(plasmid_fasta):
+    for record in SeqIO.parse(plasmid_fasta, "fasta"):
+        seq = str(record.seq).upper()
+        if seq:
+            return record.id, seq
+    raise ValueError(f"No sequence found in plasmid FASTA {plasmid_fasta}")
+
+
+def circular_slice(seq, start0, length):
+    """``length`` bases of circular ``seq`` starting at 0-based ``start0``."""
+    n = len(seq)
+    if length <= 0 or n == 0:
+        return ""
+    start0 %= n
+    reps = (start0 + length) // n + 1
+    return (seq * reps)[start0:start0 + length]
+
+
+def norm_pos(pos1, plen):
+    """Map a 1-based coordinate on the doubled plasmid into 1..plen."""
+    return (int(pos1) - 1) % plen + 1
+
+
+def _to_int(value):
+    try:
+        if pd.isna(value):
+            return None
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _run(cmd, what, cwd=None):
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     except FileNotFoundError:
-        print(f"Error: {input_fasta} not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-def simple_loading_bar(current, total):
-    progress = int((current / total) * 100)
-    bar = '=' * (progress // 2) + ' ' * (50 - (progress // 2))
-    print(f"\rProcessing: [{bar}] {progress}% ({current}/{total})", end='', flush=True)
+        raise RuntimeError(f"'{cmd[0]}' not found in PATH; it is required for {what}.") from None
+    if res.returncode != 0:
+        raise RuntimeError(f"{what} failed (exit {res.returncode}): {' '.join(cmd)}\n{res.stderr.strip()}")
+    return res
 
 
-#Old function:
-def perform_blast_with_os(query_fasta, subject_fasta, fasta_db, xml_output):
-    os.system(f"makeblastdb -in {subject_fasta} -dbtype nucl -out {fasta_db} > /dev/null 2>&1")
-    os.system(f"blastn -query {query_fasta} -db {fasta_db} -out {xml_output} -outfmt 6 -max_target_seqs 0") #For unlimited hits
+# makeblastdb/blastn cannot handle spaces in database paths, so both run inside
+# a temporary work_dir (no spaces) with relative file names.
+PLASMID_DB = "plasmid_x2_db"
 
 
+def build_plasmid_db(plasmid_seq, work_dir, name="plasmid"):
+    """Write the plasmid concatenated with itself to work_dir and make a BLAST DB of it."""
+    os.makedirs(work_dir, exist_ok=True)
+    with open(os.path.join(work_dir, "plasmid_x2.fasta"), "w") as fh:
+        fh.write(f">{name}_x2\n{plasmid_seq}{plasmid_seq}\n")
+    _run(["makeblastdb", "-in", "plasmid_x2.fasta", "-dbtype", "nucl", "-out", PLASMID_DB],
+         "makeblastdb", cwd=work_dir)
+    return os.path.join(work_dir, PLASMID_DB)
 
 
-def main_dr_finder(current_dir, plasmid_fasta, open_gap, threshold, repeat_th, force_w=True):
-    
-    original_stdout = sys.stdout #For debugging 
+def run_blast(query_name, out_name, work_dir, threads=1):
+    """blastn work_dir/query_name against the doubled plasmid DB in work_dir."""
+    _run(["blastn", "-query", query_name, "-db", PLASMID_DB, "-out", out_name,
+          "-outfmt", "6 " + " ".join(BLAST_FIELDS),
+          "-evalue", "1e-5", "-dust", "no", "-soft_masking", "false",
+          "-word_size", "16", "-num_threads", str(max(1, int(threads)))],
+         "blastn (plasmid flanks)", cwd=work_dir)
 
-    #current_dir = "."
-    # Temp klasörünü oluşturma (yoksa)
-    temp_dir = os.path.join(current_dir, "temp-dr-finder")
-    if not os.path.exists(temp_dir):
-        os.makedirs(temp_dir)
 
+def load_hits(blast_out):
+    hits = {}
+    if not os.path.exists(blast_out) or os.path.getsize(blast_out) == 0:
+        return hits
+    df = pd.read_csv(blast_out, sep="\t", header=None, names=BLAST_FIELDS, dtype={"qseqid": str})
+    for qid, grp in df.groupby("qseqid"):
+        hits[qid] = grp.to_dict("records")
+    return hits
+
+
+# --------------------------------------------------------------------------
+# core logic (pure, unit-testable)
+# --------------------------------------------------------------------------
+def flank_junction(h, side, limit=None):
+    """Plasmid coordinate (doubled space) of the flank base adjacent to the insertion.
+
+    side "L": last plasmid base of the HSP whose read position is <= limit.
+    side "R": first plasmid base of the HSP whose read position is >= limit.
+    limit=None means no clipping. The gapped alignment (qseq/sseq) is walked so
+    clipping is exact in plasmid coordinates; without it an ungapped offset is used.
+    Returns (coordinate, plus_strand).
+    """
+    plus = h["sstart"] <= h["send"]
+    sign = 1 if plus else -1
+    rq_s, rq_e = int(h["rq_s"]), int(h["rq_e"])
+    if limit is None:
+        return int(h["send"] if side == "L" else h["sstart"]), plus
+    # HSP stops short of the IS boundary (sequencing error at the junction):
+    # extend ungapped up to MAX_EXTEND bases.
+    if side == "L" and rq_e <= limit:
+        gap = limit - rq_e
+        return int(h["send"]) + sign * (gap if gap <= MAX_EXTEND else 0), plus
+    if side == "R" and rq_s >= limit:
+        gap = rq_s - limit
+        return int(h["sstart"]) - sign * (gap if gap <= MAX_EXTEND else 0), plus
+    qseq, sseq = h.get("qseq"), h.get("sseq")
+    if not isinstance(qseq, str) or not isinstance(sseq, str) or len(qseq) != len(sseq):
+        if side == "L":
+            k = min(rq_e - limit, rq_e - rq_s)
+            return int(h["send"]) - sign * k, plus
+        k = min(limit - rq_s, rq_e - rq_s)
+        return int(h["sstart"]) + sign * k, plus
+    if side == "L":
+        r, p = rq_s - 1, int(h["sstart"]) - sign       # last consumed read / plasmid base
+        for qc, sc in zip(qseq, sseq):
+            if r >= limit:      # limit base consumed: stop, do not take trailing gaps
+                break
+            if qc != "-":
+                r += 1
+            if sc != "-":
+                p += sign
+        return p, plus
+    r, p = rq_e + 1, int(h["send"]) + sign
+    for qc, sc in zip(reversed(qseq), reversed(sseq)):
+        if r <= limit:
+            break
+        if qc != "-":
+            r -= 1
+        if sc != "-":
+            p -= sign
+    return p, plus
+
+
+def _pick(cands):
+    """Highest bit score, then closest to the junction."""
+    if not cands:
+        return None
+    return sorted(cands, key=lambda c: (-c[0]["bitscore"], c[1]))[0][0]
+
+
+def analyze_insertion(hits, ins_start, ins_end, offset, plasmid_seq, threshold, repeat_th,
+                      is_read_start=None, is_read_end=None):
+    """Find the DR of one insertion.
+
+    hits: BLAST rows (dicts with BLAST_FIELDS) of the read window vs the doubled
+      plasmid; query coordinates are 1-based on the window.
+    ins_start, ins_end: 0-based half-open insertion coordinates on the read.
+    offset: 0-based read coordinate of the first window base.
+    is_read_start, is_read_end: optional 1-based inclusive read coordinates of
+      the IS element; flank HSPs are clipped so they do not run into it.
+    Returns a dict with the output columns that depend on the alignment.
+    """
+    plen = len(plasmid_seq)
+    res = {"Start Subject": None, "End Subject": None, "Insertion Point": None,
+           "Repeat Length": None, "Overlap Sequence": "N/A", "Read Strand": None,
+           "Status": "no_flank_hit"}
+    left_junction_read = ins_start          # 1-based read position of last base before insertion
+    right_junction_read = ins_end + 1       # 1-based read position of first base after insertion
+
+    left_c, right_c = [], []
+    for h in hits or []:
+        rq_s, rq_e = offset + int(h["qstart"]), offset + int(h["qend"])
+        if rq_s <= left_junction_read and rq_e >= right_junction_read:
+            continue    # spans the whole insertion: not a flank
+        h = dict(h, rq_s=rq_s, rq_e=rq_e)
+        d_left = abs(rq_e - left_junction_read)
+        if d_left <= threshold and rq_s <= left_junction_read:
+            left_c.append((h, d_left))
+        d_right = abs(rq_s - right_junction_read)
+        if d_right <= threshold and rq_e >= right_junction_read:
+            right_c.append((h, d_right))
+    left, right = _pick(left_c), _pick(right_c)
+
+    def junction(h, side):
+        if side == "L":
+            return flank_junction(h, "L", None if is_read_start is None else is_read_start - 1)
+        return flank_junction(h, "R", None if is_read_end is None else is_read_end + 1)
+
+    if left is None and right is None:
+        return res
+
+    if left is None or right is None:
+        h, side = (left, "L") if left is not None else (right, "R")
+        pos, plus = junction(h, side)
+        res["Read Strand"] = "+" if plus else "-"
+        res["Status"] = "left_flank_only" if side == "L" else "right_flank_only"
+        # the flank gives either the plasmid-left (a) or plasmid-right (b) end
+        gives_a = (side == "L") == plus
+        if gives_a:
+            res["End Subject"] = norm_pos(pos, plen)
+            res["Insertion Point"] = norm_pos(pos + 1, plen)   # exact only for blunt insertions
+        else:
+            res["Start Subject"] = norm_pos(pos, plen)
+            res["Insertion Point"] = norm_pos(pos, plen)
+        return res
+
+    lpos, lplus = junction(left, "L")
+    rpos, rplus = junction(right, "R")
+    if lplus != rplus:
+        res["Status"] = "strand_conflict"
+        return res
+    res["Read Strand"] = "+" if lplus else "-"
+    a, b = (lpos, rpos) if lplus else (rpos, lpos)   # a: plasmid-left end, b: plasmid-right start
+    d = (a - b) % plen
+    if d > plen // 2:
+        d -= plen
+    dr_len = d + 1
+    b_n = norm_pos(b, plen)
+    res.update({"Start Subject": b_n, "End Subject": norm_pos(a, plen),
+                "Insertion Point": b_n, "Repeat Length": dr_len})
+    if dr_len > repeat_th:
+        res["Status"] = "repeat_too_long"
+    elif dr_len > 0:
+        res["Status"] = "DR"
+        res["Overlap Sequence"] = circular_slice(plasmid_seq, b_n - 1, dr_len)
+    elif dr_len == 0:
+        res["Status"] = "no_duplication"
+    else:
+        res["Status"] = "target_site_deletion"
+    return res
+
+
+def read_is_lengths(is_fasta):
+    """IS name -> length; keyed by record ID and by the last header word (older annotations)."""
+    lengths = {}
+    if not is_fasta:
+        return lengths
+    for rec in SeqIO.parse(is_fasta, "fasta"):
+        lengths.setdefault(rec.id, len(rec.seq))
+        lengths.setdefault(rec.description.split()[-1], len(rec.seq))
+    return lengths
+
+
+def _is_bounds(row, q_st, is_lengths=None):
+    """1-based inclusive read coordinates of an IS_DB hit, else (None, None).
+
+    If the hit does not reach the IS ends (bases assigned to the flank alignment
+    by the mapper, or sequencing errors at the IS end) the bounds are extended by
+    the missing IS bases: towards IS position 1 always, towards the IS end when the
+    IS length is known (``is_lengths``).
+    """
+    if str(row.get("Note", "")).strip() != "IS_DB":
+        return None, None
+    qs, qe = _to_int(row.get("Query Start")), _to_int(row.get("Query End"))
+    ss, se = _to_int(row.get("Subject Start")), _to_int(row.get("Subject End"))
+    if qs is None or qe is None:
+        return None, None
+    qs, qe = min(qs, qe), max(qs, qe)
+    start, end = q_st + qs, q_st + qe
+    if ss is not None and se is not None:
+        is_len = (is_lengths or {}).get(str(row.get("Subject ID")))
+        missing_first = min(ss, se) - 1
+        missing_last = max(0, is_len - max(ss, se)) if is_len else 0
+        if ss <= se:            # IS on the read's + strand: IS position 1 is on the left
+            start, end = start - missing_first, end + missing_last
+        else:
+            start, end = start - missing_last, end + missing_first
+    return start, end
+
+
+def find_drs_for_sample(best_alignment_path, reads_fasta, plasmid_seq,
+                        open_gap=500, threshold=200, repeat_th=30, threads=1, is_lengths=None):
+    """Return a DataFrame (OUTPUT_COLUMNS) with one row per insertion."""
+    df = pd.read_csv(best_alignment_path, sep="\t", dtype={"Query ID": str, "Subject ID": str})
+    if df.empty:
+        return pd.DataFrame(columns=OUTPUT_COLUMNS)
+    n_before = len(df)
+    df = df.drop_duplicates(subset="Query ID", keep="first").reset_index(drop=True)
+    if len(df) != n_before:
+        logger.warning("%s: %d duplicate Query ID rows ignored (first row kept)",
+                       best_alignment_path, n_before - len(df))
+
+    tmp = tempfile.TemporaryDirectory(prefix="trapo_dr_")
+    work_dir = tmp.name
+    if " " in work_dir:
+        raise RuntimeError(f"BLAST cannot use a temp directory with spaces ({work_dir}); set TMPDIR")
+    reads = SeqIO.index(reads_fasta, "fasta")
+    query_fa = os.path.join(work_dir, "flank_windows.fasta")
+    jobs, rows = [], []
+    try:
+        with open(query_fa, "w") as fh:
+            for idx, row in df.iterrows():
+                base = {"Read ID": None, "Subject ID": row.get("Subject ID"),
+                        "Query Start CSV": None, "Query End CSV": None,
+                        "Overlap Sequence": "N/A"}
+                parsed = parse_query_id(row["Query ID"])
+                if parsed is None:
+                    rows.append(dict(base, **{"Read ID": row["Query ID"], "Status": "bad_query_id"}))
+                    continue
+                read_id, q_st, q_end = parsed
+                base.update({"Read ID": read_id, "Query Start CSV": q_st, "Query End CSV": q_end})
+                if read_id not in reads:
+                    rows.append(dict(base, Status="read_not_found"))
+                    continue
+                seq = str(reads[read_id].seq).upper()
+                w0, w1 = max(0, q_st - open_gap), min(len(seq), q_end + open_gap)
+                qid = f"ins{idx}"
+                fh.write(f">{qid}\n{seq[w0:w1]}\n")
+                is_s, is_e = _is_bounds(row, q_st, is_lengths)
+                jobs.append((len(rows), qid, q_st, q_end, w0, is_s, is_e))
+                rows.append(base)
+    finally:
+        reads.close()
+
+    hits = {}
+    with tmp:
+        if jobs:
+            build_plasmid_db(plasmid_seq, work_dir)
+            run_blast("flank_windows.fasta", "flank_windows_vs_plasmid.tsv", work_dir, threads)
+            hits = load_hits(os.path.join(work_dir, "flank_windows_vs_plasmid.tsv"))
+    for n, (ri, qid, q_st, q_end, w0, is_s, is_e) in enumerate(jobs, 1):
+        rows[ri].update(analyze_insertion(hits.get(qid, []), q_st, q_end, w0, plasmid_seq,
+                                          threshold, repeat_th, is_s, is_e))
+        if n % 1000 == 0:
+            logger.info("  %d/%d insertions analysed", n, len(jobs))
+
+    out = pd.DataFrame(rows).reindex(columns=OUTPUT_COLUMNS)
+    for col in ("Query Start CSV", "Query End CSV", "Start Subject", "End Subject",
+                "Insertion Point", "Repeat Length"):
+        out[col] = out[col].astype("Int64")
+    return out
+
+
+def _find_best_alignment(folder_path):
+    files = sorted(f for f in os.listdir(folder_path)
+                   if f.endswith("best_alignment.tab") or f.endswith("best_alignments.tab"))
+    exact = [f for f in files if f in ("best_alignment.tab", "best_alignments.tab")]
+    chosen = (exact or files or [None])[0]
+    return os.path.join(folder_path, chosen) if chosen else None
+
+
+def main_dr_finder(current_dir, plasmid_fasta, open_gap=500, threshold=200, repeat_th=30,
+                   force_w=True, threads=1, is_fasta=None):
+    """Run the DR finder on every sample folder in ``current_dir``.
+
+    open_gap: read bases taken on each side of the insertion as flank (bp).
+    threshold: max distance (bp, inclusive) between a flank HSP end and the
+      insertion boundary on the read.
+    repeat_th: max DR length (bp, inclusive) reported as a DR.
+    threads: blastn -num_threads.
+    is_fasta: optional curated IS FASTA (the one given to blast_annot); its
+      lengths make IS-boundary clipping exact at both IS ends.
+    Returns the list of written CSV paths.
+    """
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for tool in ("blastn", "makeblastdb"):
+        if shutil.which(tool) is None:
+            raise RuntimeError(f"'{tool}' not found in PATH; it is required by dr_finder.")
+    if open_gap < 30:
+        logger.warning("open_gap=%d is very short; flanks may not be found", open_gap)
+
+    _, plasmid_seq = read_plasmid(plasmid_fasta)
+    is_lengths = read_is_lengths(is_fasta)
     ins_dir = os.path.join(current_dir, "insertions")
-    if not os.path.exists(ins_dir):
-        os.makedirs(ins_dir)
+    os.makedirs(ins_dir, exist_ok=True)
 
-
-    # Klasörleri gezip her klasördeki işlemleri gerçekleştiriyoruz
-    for folder in os.listdir(current_dir):
+    written = []
+    for folder in sorted(os.listdir(current_dir)):
         folder_path = os.path.join(current_dir, folder)
-        
-
-        if os.path.isdir(folder_path):
-            print(folder_path)
-            out_ins_file = os.path.join(ins_dir, f"{folder}_insertions.csv")
-            results_txt_list = []
-
-            if os.path.exists(out_ins_file) and force_w:
-                print(f"{out_ins_file} already exist, deleting...")
-                os.remove(out_ins_file)
-            elif os.path.exists(out_ins_file) and not force_w:
-                print(f"{out_ins_file} already exist, skipping...")
-                continue
-            else:
-                print(f"{out_ins_file} not exist, will write...")
-            
-            # Best alignment CSV dosyasını ve FASTA dosyasını al
-            best_alignment_csv_files = [f for f in os.listdir(folder_path) if f.endswith("best_alignment.tab")]
-            
-            if not best_alignment_csv_files:
-                print(f"{folder_path} can not be found 'best_alignments.tab' , Skipping")
-                continue  # Bu klasör için işlemi atla
-            
-            best_alignment_csv = best_alignment_csv_files[0]  # Dosya varsa ilkini al
-            fasta_file = f"{folder}.fasta"
-            fasta_path = os.path.join(folder_path, fasta_file)
-            temp_fasta = os.path.join(temp_dir, fasta_file)
-            #blast_out = os.path.join(temp_dir, 'blast_out')
-
-            copy_fasta(fasta_path, temp_fasta)
-
-            temp_fasta_db = os.path.splitext(temp_fasta)[0] + '_db'
-
-            batch_size = 200
-            
-            blast_out = process_blast_m(temp_fasta, plasmid_fasta, batch_size, temp_dir, temp_dir)
-            #blast_out = process_large_blast(plasmid_fasta, batch_size, temp_fasta, temp_fasta_db, temp_dir)
-            #perform_blast_with_os(plasmid_fasta, temp_fasta, temp_fasta_db, blast_out)
-
-            best_alignment_path = os.path.join(folder_path, best_alignment_csv)
-            
-            # CSV dosyasını oku
-            try:
-                df = pd.read_csv(blast_out)
-            except pd.errors.EmptyDataError:
-                print(f"{blast_out} boş ya da okunabilir veri yok.")
-                df = None
-                continue    
-            df = pd.read_csv(best_alignment_path, sep='\t')
-            
-                
-            for record in SeqIO.parse(plasmid_fasta, "fasta"):
-                sequence = str(record.seq)
-                break  # Tek bir kayıt varsa, döngüden çık
-
-
-            len_reads_items = len(df)
-            blast_df_raw = pd.read_csv(blast_out, sep='\t', header=None)
-
-            # Her bir Query ID için işlem yap
-            for index, row in df.iterrows():
-                simple_loading_bar(index + 1, len_reads_items)
-                sys.stdout = open(os.devnull, 'w')
-                
-                query_id = row['Query ID'].split('_')[0]
-                q_st = int(row['Query ID'].split('_')[1])
-                q_end = int(row['Query ID'].split('_')[2])
-                subject_id = row['Subject ID']
-
-                overlaps = analyze_blast_results(query_id, blast_df_raw, q_st, q_end, fasta_path, sequence, threshold, repeat_th)
-                
-                # Örnek sonuçları CSV'ye yazma
-                for overlap in overlaps:
-                    result_df = pd.DataFrame({
-                        "Read ID": [query_id],
-                        "Subject ID": [subject_id],
-                        "Query Start CSV": [q_st],
-                        "Query End CSV": [q_end],
-                        "Start Subject": [overlap["Start Subject"]],
-                        "End Subject": [overlap["End Subject"]],
-                        "Insertion Point": [overlap["Insertion Point"]],
-                        "Repeat Length": [overlap["Repeat Length"]],
-                        "Overlap Sequence": [overlap["Overlap Sequence"]]
-                    })
-                    results_txt_list.append(result_df)
-                sys.stdout = original_stdout
-            combined_df = pd.concat(results_txt_list, ignore_index=True)
-            save_to_csv(combined_df, out_ins_file)
-
-            print('Control the file')
-            
-
-
-#looking the folders in data to find *best_alignment.tab inputs...
-#main_dr_finder("data", "data/01_pMAT1_plasmid.fasta", 500, 200, 30)
+        if folder in SKIP_FOLDERS or not os.path.isdir(folder_path):
+            continue
+        out_file = os.path.join(ins_dir, f"{folder}_insertions.csv")
+        if os.path.exists(out_file) and not force_w:
+            logger.info("%s exists, skipping", out_file)
+            continue
+        best = _find_best_alignment(folder_path)
+        if best is None:
+            logger.info("%s: no best_alignment.tab, skipping", folder_path)
+            continue
+        reads_fasta = os.path.join(folder_path, f"{folder}.fasta")
+        if not os.path.exists(reads_fasta):
+            logger.warning("%s: reads FASTA %s not found, skipping", folder_path, reads_fasta)
+            continue
+        logger.info("DR finder: %s", folder)
+        result = find_drs_for_sample(best, reads_fasta, plasmid_seq, open_gap, threshold,
+                                     repeat_th, threads, is_lengths)
+        result.to_csv(out_file, index=False)
+        counts = result["Status"].value_counts().to_dict() if not result.empty else {}
+        logger.info("  %d insertions -> %s %s", len(result), out_file, counts)
+        written.append(out_file)
+    return written
