@@ -22,3 +22,4 @@ sim_out/
 
 # Local publication workspace (results, figures, notes) - not versioned
 publication/
+.DS_Store
